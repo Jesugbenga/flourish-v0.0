@@ -216,6 +216,7 @@ const styles = StyleSheet.create({
   actionsScroll: {
     marginHorizontal: -Spacing.lg,
     paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
     marginBottom: Spacing.lg,
   },
   actionCard: {
