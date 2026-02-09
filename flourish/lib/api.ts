@@ -18,6 +18,7 @@ import {
   setDoc,
   addDoc,
 } from 'firebase/firestore';
+import { chatWithGemini, GeminiChatPayload } from './gemini-client';
 
 // ── Types mirroring backend payloads / responses ────────────
 
@@ -96,6 +97,13 @@ export interface ProfileData {
     kidsAges: number[] | null;
     monthlyIncome: number | null;
     monthlyBudget: number | null;
+    budgetCategories?: Array<{
+      id: string;
+      name: string;
+      allocated: number;
+      spent: number;
+      icon: string;
+    }> | null;
     savingsGoal: number | null;
     savingsGoalLabel: string | null;
     bio: string | null;
@@ -120,6 +128,13 @@ export interface UpdateProfilePayload {
   kidsAges?: number[];
   monthlyIncome?: number;
   monthlyBudget?: number;
+  budgetCategories?: Array<{
+    id?: string;
+    name: string;
+    allocated: number;
+    spent: number;
+    icon: string;
+  }>;
   savingsGoal?: number;
   savingsGoalLabel?: string;
   bio?: string;
@@ -280,6 +295,7 @@ export const api = {
             kidsAges: null,
             monthlyIncome: null,
             monthlyBudget: null,
+            budgetCategories: null,
             savingsGoal: null,
             savingsGoalLabel: null,
             bio: null,
@@ -328,6 +344,7 @@ export const api = {
           kidsAges: (profileData as any).kids_ages ?? null,
           monthlyIncome: (profileData as any).monthly_income ?? null,
           monthlyBudget: (profileData as any).monthly_budget ?? null,
+          budgetCategories: (profileData as any).budget_categories ?? null,
           savingsGoal: (profileData as any).savings_goal ?? null,
           savingsGoalLabel: (profileData as any).savings_goal_label ?? null,
           bio: (profileData as any).bio ?? null,
@@ -362,6 +379,7 @@ export const api = {
     if (payload.savingsGoalLabel !== undefined) updates.savings_goal_label = payload.savingsGoalLabel;
     if (payload.bio !== undefined) updates.bio = payload.bio;
     if (payload.avatarUrl !== undefined) updates.avatar_url = payload.avatarUrl;
+    if (payload.budgetCategories !== undefined) updates.budget_categories = payload.budgetCategories;
     if (payload.dietaryPreferences !== undefined) updates.dietary_preferences = payload.dietaryPreferences;
 
     const meaningfulFields = ['displayName', 'numKids', 'monthlyBudget', 'savingsGoal', 'monthlyIncome'];
@@ -517,9 +535,33 @@ export const api = {
   },
 
   chat: async (payload: ChatPayload) => {
-    const functions = getFunctions(firebaseApp);
-    const fn = httpsCallable<ChatPayload, ChatResponse>(functions, 'chat');
-    const result = await fn(payload);
-    return result.data;
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new ApiError('Not authenticated', 401);
+    
+    // Build user context from current profile
+    const profileRef = doc(db, 'profiles', user.uid);
+    const profileSnap = await getDoc(profileRef);
+    const profileData = profileSnap.data();
+    
+    const winsCol = collection(db, 'users', user.uid, 'wins');
+    const winsSnap = await getDocs(winsCol);
+    const recentWins = winsSnap.docs.slice(0, 3).map(d => ({
+      title: d.data().title,
+      amountSaved: d.data().amount_saved,
+    }));
+    
+    // Call Gemini directly with user context
+    const geminiPayload: GeminiChatPayload = {
+      message: payload.message,
+      conversationHistory: payload.conversationHistory,
+      userContext: {
+        totalSaved: winsSnap.docs.reduce((sum, d) => sum + (d.data().amount_saved || 0), 0),
+        monthlyBudget: profileData?.monthly_budget,
+        streakDays: 0,
+        recentWins,
+      },
+    };
+    
+    return chatWithGemini(user.uid, geminiPayload);
   },
 };

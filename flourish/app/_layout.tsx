@@ -94,6 +94,7 @@ function AppNavigator() {
               <Stack.Screen name="community" options={{ title: 'Community' }} />
               <Stack.Screen name="lesson/[id]" options={{ title: 'Learn', headerBackTitle: 'Back' }} />
               <Stack.Screen name="rebeccas-corner" options={{ title: "Rebecca's Corner" }} />
+              <Stack.Screen name="chat" options={{ title: 'Flo', headerBackTitle: 'Back' }} />
               <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
             </Stack>

@@ -78,6 +78,14 @@ export const quickActions: QuickAction[] = [
     route: '/learn',
     color: '#7EAAB0',
   },
+  {
+    id: '4',
+    title: 'Chat with Flo',
+    subtitle: 'Ask about savings and ideas',
+    icon: 'chatbubbles',
+    route: '/chat',
+    color: '#A98FC6',
+  },
 ];
 
 // ─── Smart Swaps ───────────────────────────────────────────────────────

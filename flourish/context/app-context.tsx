@@ -102,6 +102,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         totalSavings: profile.user.totalSavings,
         streak: profile.user.streakDays,
       }));
+      // Update budget state if provided by backend
+      if ((profile.profile as any).monthlyBudget !== undefined) {
+        setMonthlyBudgetState(profile.profile.monthlyBudget ?? monthlyBudget);
+      }
+      if ((profile.profile as any).budgetCategories !== undefined && Array.isArray(profile.profile.budgetCategories)) {
+        setBudget(profile.profile.budgetCategories as BudgetCategory[]);
+      }
     } catch {
       // Backend unreachable — keep mock data
     }
@@ -226,17 +233,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addCategory = useCallback((category: Omit<BudgetCategory, 'id'>) => {
-    setBudget((prev) => [
-      ...prev,
-      {
-        ...category,
-        id: Date.now().toString(),
-      },
-    ]);
+    setBudget((prev) => {
+      const next = [
+        ...prev,
+        {
+          ...category,
+          id: Date.now().toString(),
+        },
+      ];
+      // Persist to backend (profiles doc)
+      if (!MOCK_MODE) {
+        // Fire-and-forget; don't block UI
+        (async () => {
+          try {
+            await api.updateProfile({ budgetCategories: next });
+          } catch (e) {
+            // ignore for now; could show a toast later
+          }
+        })();
+      }
+      return next;
+    });
   }, []);
 
   const deleteCategory = useCallback((categoryId: string) => {
-    setBudget((prev) => prev.filter((c) => c.id !== categoryId));
+    setBudget((prev) => {
+      const next = prev.filter((c) => c.id !== categoryId);
+      if (!MOCK_MODE) {
+        (async () => {
+          try {
+            await api.updateProfile({ budgetCategories: next });
+          } catch {}
+        })();
+      }
+      return next;
+    });
   }, []);
 
   return (
