@@ -7,12 +7,18 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { FlourishButton } from '@/components/ui/flourish-button';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Card } from '@/components/ui/card';
+import { useAuthContext } from '@/context/auth-context';
+import { canAccess } from '@/lib/feature-gate';
+import { api, type GoalResponse } from '@/lib/api';
+import { MOCK_MODE } from '@/lib/config';
 
 const presetGoals = [
   { label: 'Emergency Fund', icon: 'shield-checkmark' as const, amount: 1000 },
@@ -22,10 +28,16 @@ const presetGoals = [
 ];
 
 export default function GoalCalculatorScreen() {
+  const { hasPremium } = useAuthContext();
+  const router = useRouter();
+  const gated = !canAccess('goal-calculator', hasPremium);
+
   const [goalTitle, setGoalTitle] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [months, setMonths] = useState('');
   const [calculated, setCalculated] = useState(false);
+  const [aiGoal, setAiGoal] = useState<GoalResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const target = parseFloat(targetAmount) || 0;
   const timeframe = parseInt(months) || 1;
@@ -37,6 +49,28 @@ export default function GoalCalculatorScreen() {
     setTargetAmount(preset.amount.toString());
     setMonths('12');
     setCalculated(false);
+    setAiGoal(null);
+  };
+
+  const handleCalculate = async () => {
+    setCalculated(true);
+
+    // Try AI-powered goal plan for premium users
+    if (!MOCK_MODE && !gated && target > 0) {
+      setAiLoading(true);
+      try {
+        const result = await api.goalCalculator({
+          goalAmount: target,
+          goalLabel: goalTitle,
+          timeframeMonths: timeframe,
+        });
+        setAiGoal(result);
+      } catch {
+        // Fall through to local calculation
+      } finally {
+        setAiLoading(false);
+      }
+    }
   };
 
   return (
@@ -117,7 +151,7 @@ export default function GoalCalculatorScreen() {
 
         <FlourishButton
           title="Calculate my plan"
-          onPress={() => setCalculated(true)}
+          onPress={handleCalculate}
           fullWidth
           disabled={!goalTitle || !targetAmount || !months}
           style={{ marginBottom: Spacing.lg }}
@@ -175,6 +209,48 @@ export default function GoalCalculatorScreen() {
                 <Text style={styles.suggestionText}>Complete the 7-day challenge</Text>
               </View>
             </View>
+
+            {/* AI Loading */}
+            {aiLoading && (
+              <View style={{ alignItems: 'center', padding: Spacing.lg }}>
+                <ActivityIndicator color={Colors.sage} />
+                <Text style={{ ...Typography.subhead, color: Colors.textSecondary, marginTop: Spacing.sm }}>
+                  Creating your personalised strategy…
+                </Text>
+              </View>
+            )}
+
+            {/* AI Strategies */}
+            {aiGoal && (
+              <View style={{ marginTop: Spacing.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md }}>
+                  <Ionicons name="sparkles" size={16} color={Colors.sage} />
+                  <Text style={styles.suggestionsTitle}>AI-Powered Strategies</Text>
+                </View>
+                {aiGoal.strategies.map((s, i) => (
+                  <View key={i} style={styles.suggestionRow}>
+                    <Text style={{ fontSize: 16 }}>{s.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ ...Typography.subhead, fontWeight: '600', color: Colors.text }}>{s.title}</Text>
+                      <Text style={{ ...Typography.caption1, color: Colors.textSecondary }}>{s.description} — save {s.potentialSaving}</Text>
+                    </View>
+                  </View>
+                ))}
+                {aiGoal.milestones.length > 0 && (
+                  <View style={{ marginTop: Spacing.md, backgroundColor: Colors.sageLight, padding: Spacing.md, borderRadius: BorderRadius.md }}>
+                    <Text style={{ ...Typography.headline, color: Colors.sageDark, marginBottom: Spacing.sm }}>Milestones</Text>
+                    {aiGoal.milestones.map((m, i) => (
+                      <Text key={i} style={{ ...Typography.caption1, color: Colors.sageDark, marginBottom: 4 }}>
+                        🏆 Month {m.month}: {m.amount} — {m.celebration}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+                <Text style={{ ...Typography.body, color: Colors.sage, fontStyle: 'italic', marginTop: Spacing.md, textAlign: 'center' }}>
+                  {aiGoal.encouragement}
+                </Text>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>

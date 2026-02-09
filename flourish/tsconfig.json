@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "rootDir": "./",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
+    "skipLibCheck": true,
     "paths": {
       "@/*": [
         "./*"

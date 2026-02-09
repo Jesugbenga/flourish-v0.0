@@ -1,9 +1,13 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Purchases from 'react-native-purchases';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { FlourishButton } from '@/components/ui/flourish-button';
+import { useAuthContext } from '@/context/auth-context';
+import { MOCK_MODE } from '@/lib/config';
 
 const features = [
   { icon: 'swap-horizontal' as const, title: 'Unlimited Smart Swaps', sub: 'Find savings on everything' },
@@ -16,6 +20,40 @@ const features = [
 
 export default function PaywallScreen() {
   const router = useRouter();
+  const { refreshPremium } = useAuthContext();
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
+  const [purchasing, setPurchasing] = useState(false);
+
+  const handlePurchase = async () => {
+    if (MOCK_MODE) {
+      Alert.alert('Mock Mode', 'Purchases are disabled in mock mode.');
+      router.back();
+      return;
+    }
+
+    setPurchasing(true);
+    try {
+      const offerings = await Purchases.getOfferings();
+      const pkg = selectedPlan === 'annual'
+        ? offerings.current?.annual
+        : offerings.current?.monthly;
+
+      if (pkg) {
+        await Purchases.purchasePackage(pkg);
+        await refreshPremium();
+        router.back();
+      } else {
+        Alert.alert('Error', 'No packages available. Please try again later.');
+      }
+    } catch (e: unknown) {
+      const err = e as { userCancelled?: boolean };
+      if (!err.userCancelled) {
+        Alert.alert('Purchase failed', 'Please try again.');
+      }
+    } finally {
+      setPurchasing(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,28 +94,35 @@ export default function PaywallScreen() {
 
         {/* Pricing */}
         <View style={styles.pricingSection}>
-          <TouchableOpacity style={styles.priceCard}>
+          <TouchableOpacity
+            style={[styles.priceCard, selectedPlan === 'monthly' && styles.priceCardHighlighted]}
+            onPress={() => setSelectedPlan('monthly')}
+          >
             <Text style={styles.priceLabel}>Monthly</Text>
             <Text style={styles.priceAmount}>£4.99</Text>
             <Text style={styles.pricePer}>/month</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.priceCard, styles.priceCardHighlighted]}>
+          <TouchableOpacity
+            style={[styles.priceCard, selectedPlan === 'annual' && styles.priceCardHighlighted]}
+            onPress={() => setSelectedPlan('annual')}
+          >
             <View style={styles.bestValueBadge}>
               <Text style={styles.bestValueText}>Best Value</Text>
             </View>
             <Text style={styles.priceLabel}>Annual</Text>
-            <Text style={[styles.priceAmount, { color: Colors.sageDark }]}>£39.99</Text>
+            <Text style={[styles.priceAmount, selectedPlan === 'annual' && { color: Colors.sageDark }]}>£39.99</Text>
             <Text style={styles.pricePer}>/year</Text>
             <Text style={styles.priceSave}>Save 33%</Text>
           </TouchableOpacity>
         </View>
 
         <FlourishButton
-          title="Start 7-day free trial"
-          onPress={() => router.back()}
+          title={purchasing ? 'Processing…' : 'Start 7-day free trial'}
+          onPress={handlePurchase}
           fullWidth
           size="lg"
+          disabled={purchasing}
           style={{ marginBottom: Spacing.md }}
         />
 

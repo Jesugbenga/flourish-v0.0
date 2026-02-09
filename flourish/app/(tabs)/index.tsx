@@ -32,14 +32,16 @@ export default function HomeScreen() {
         <View style={styles.greeting}>
           <View style={styles.greetingRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.greetingText}>
-                {getGreeting()}, {user.name} 🌱
-              </Text>
+              <Text style={styles.greetingText}>{getGreeting()},</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.nameText}>{user.name}</Text>
+                <Ionicons name="leaf" size={20} color={Colors.sage} style={{ marginLeft: Spacing.sm }} />
+              </View>
               <Text style={styles.subGreeting}>
                 One small step today makes a difference.
               </Text>
             </View>
-            <TouchableOpacity style={styles.profileButton}>
+            <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/profile')}>
               <Ionicons name="person-circle-outline" size={36} color={Colors.sage} />
             </TouchableOpacity>
           </View>
@@ -70,6 +72,7 @@ export default function HomeScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.actionsScroll}
+          contentContainerStyle={styles.actionsScrollContent}
         >
           {quickActions.map((action) => (
             <TouchableOpacity
@@ -151,6 +154,15 @@ const styles = StyleSheet.create({
     ...Typography.title1,
     color: Colors.text,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+  },
+  nameText: {
+    ...Typography.title1,
+    color: Colors.text,
+  },
   subGreeting: {
     ...Typography.body,
     color: Colors.textSecondary,
@@ -218,6 +230,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
     marginBottom: Spacing.lg,
+  },
+  actionsScrollContent: {
+    paddingRight: Spacing.lg,
   },
   actionCard: {
     backgroundColor: Colors.card,

@@ -1,4 +1,5 @@
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
+import { useState, useCallback } from 'react';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Share, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -20,7 +21,14 @@ const winTypeConfig: Record<
 
 export default function WinsScreen() {
   const router = useRouter();
-  const { user, wins } = useApp();
+  const { user, wins, challengeDays, refreshWins } = useApp();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshWins();
+    setRefreshing(false);
+  }, [refreshWins]);
 
   const shareWins = async () => {
     try {
@@ -30,9 +38,18 @@ export default function WinsScreen() {
     } catch {}
   };
 
+  const completedDays = challengeDays.filter((d) => d.completed).length;
+  const totalChallengeDays = challengeDays.length;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.sage} />
+        }
+      >
         <View style={styles.header}>
           <Text style={styles.title}>Your Wins</Text>
           <TouchableOpacity onPress={shareWins} style={styles.shareBtn}>
@@ -80,9 +97,11 @@ export default function WinsScreen() {
           <View style={styles.challengeRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.challengeTitle}>7-Day Challenge</Text>
-              <Text style={styles.challengeSub}>3 of 7 days complete</Text>
+              <Text style={styles.challengeSub}>
+                {completedDays} of {totalChallengeDays} days complete
+              </Text>
               <ProgressBar
-                progress={3 / 7}
+                progress={totalChallengeDays > 0 ? completedDays / totalChallengeDays : 0}
                 style={{ marginTop: 10 }}
                 color={Colors.gold}
                 backgroundColor={Colors.goldLight}

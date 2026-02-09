@@ -1,4 +1,13 @@
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  type ReactNode,
+} from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { firebaseAuth } from '@/lib/firebase';
 import type { UserProfile, SavingsWin, ChallengeDay, BudgetCategory } from '@/types';
 import {
   userProfile as defaultProfile,
@@ -6,22 +15,68 @@ import {
   challengeDays as defaultChallenge,
   budgetCategories as defaultBudget,
 } from '@/data/mock-data';
+import { MOCK_MODE } from '@/lib/config';
+import { api, type WinPayload, type WinRow, type WinsSummary } from '@/lib/api';
 
 // ─── Context Shape ─────────────────────────────────────────────────────
 
 interface AppContextType {
+  /** User profile (local mock or synced from backend) */
   user: UserProfile;
+  /** Savings wins list */
   wins: SavingsWin[];
+  /** 7-day challenge progress (mock-only for now) */
   challengeDays: ChallengeDay[];
+  /** Budget categories (mock-only for now) */
   budget: BudgetCategory[];
+  /** Monthly budget total */
+  monthlyBudget: number;
+  /** Liked community post IDs */
   likedPosts: Set<string>;
+  /** Whether backend data is currently loading */
+  loading: boolean;
+
+  // ── Actions ──
   addWin: (win: SavingsWin) => void;
   completeChallenge: (day: number) => void;
   toggleLike: (postId: string) => void;
   updateBudget: (categoryId: string, spent: number) => void;
+  setMonthlyBudget: (amount: number) => void;
+  addCategory: (category: Omit<BudgetCategory, 'id'>) => void;
+  deleteCategory: (categoryId: string) => void;
+
+  // ── Backend syncing ──
+  refreshProfile: () => Promise<void>;
+  refreshWins: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+/** Convert a backend WinRow into the frontend SavingsWin shape */
+function toSavingsWin(row: WinRow): SavingsWin {
+  return {
+    id: row.id,
+    type: row.category as SavingsWin['type'],
+    description: row.title,
+    amount: row.amount_saved,
+    date: row.created_at.split('T')[0],
+  };
+}
+
+/** Build a UserProfile from a WinsSummary response */
+function profileFromSummary(summary: WinsSummary, existing: UserProfile): UserProfile {
+  return {
+    ...existing,
+    totalSavings: summary.totalSaved,
+    swapSavings: summary.byCategory?.swap?.total ?? existing.swapSavings,
+    mealSavings: summary.byCategory?.meal?.total ?? existing.mealSavings,
+    budgetSavings: summary.byCategory?.budget?.total ?? existing.budgetSavings,
+    challengeSavings: summary.byCategory?.challenge?.total ?? existing.challengeSavings,
+    streak: summary.streakDays,
+  };
+}
 
 // ─── Provider ──────────────────────────────────────────────────────────
 
@@ -30,36 +85,159 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [wins, setWins] = useState<SavingsWin[]>(defaultWins);
   const [challengeState, setChallengeState] = useState<ChallengeDay[]>(defaultChallenge);
   const [budget, setBudget] = useState<BudgetCategory[]>(defaultBudget);
+  const [monthlyBudget, setMonthlyBudgetState] = useState<number>(2000);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
 
-  const addWin = (win: SavingsWin) => {
-    setWins((prev) => [win, ...prev]);
-    setUser((prev) => {
-      const key = `${win.type}Savings` as keyof UserProfile;
-      return {
+  // ── Backend data fetchers ──
+
+  const refreshProfile = useCallback(async () => {
+    // If running in mock mode, still allow refresh when a real user is signed in
+    if (MOCK_MODE && !firebaseAuth.currentUser) return;
+    try {
+      const profile = await api.getProfile();
+      setUser((prev) => ({
         ...prev,
-        totalSavings: prev.totalSavings + win.amount,
-        [key]: (prev[key] as number) + win.amount,
-      };
+        name: profile.profile.displayName ?? prev.name,
+        totalSavings: profile.user.totalSavings,
+        streak: profile.user.streakDays,
+      }));
+    } catch {
+      // Backend unreachable — keep mock data
+    }
+  }, []);
+
+  const refreshWins = useCallback(async () => {
+    // If running in mock mode, still allow refresh when a real user is signed in
+    if (MOCK_MODE && !firebaseAuth.currentUser) return;
+    try {
+      setLoading(true);
+      const [winsData, summary] = await Promise.all([
+        api.getWins({ limit: 50 }),
+        api.getWinsSummary(),
+      ]);
+      setWins(winsData.wins.map(toSavingsWin));
+      setUser((prev) => profileFromSummary(summary, prev));
+    } catch {
+      // Offline — keep local state
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Initial fetch when not in mock mode ──
+  useEffect(() => {
+    // Run initial fetch if not in mock mode, or if a user is already signed in.
+    if (MOCK_MODE && !firebaseAuth.currentUser) return;
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([refreshProfile(), refreshWins()]);
+      setLoading(false);
+    };
+    init();
+  }, [refreshProfile, refreshWins]);
+
+  // If the user is signed in (even when MOCK_MODE=true), prefer their Firebase
+  // displayName over the mock name so greetings show correctly.
+  useEffect(() => {
+    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
+      if (u?.displayName) {
+        setUser((prev) => ({ ...prev, name: u.displayName ?? prev.name }));
+      }
     });
-  };
+    return unsub;
+  }, []);
 
-  const completeChallenge = (day: number) => {
-    setChallengeState((prev) => prev.map((d) => (d.day === day ? { ...d, completed: true } : d)));
-  };
+  // ── Actions ──
 
-  const toggleLike = (postId: string) => {
+  const addWin = useCallback(
+    (win: SavingsWin) => {
+      // Optimistic local update
+      setWins((prev) => [win, ...prev]);
+      setUser((prev) => {
+        const key = `${win.type}Savings` as keyof UserProfile;
+        return {
+          ...prev,
+          totalSavings: prev.totalSavings + win.amount,
+          [key]: (prev[key] as number) + win.amount,
+        };
+      });
+
+      // Backend sync (fire & forget)
+      if (!MOCK_MODE) {
+        const payload: WinPayload = {
+          title: win.description,
+          amountSaved: win.amount,
+          category: win.type,
+        };
+        api.logWin(payload).catch(() => {
+          // Could revert optimistic update here in the future
+        });
+      }
+    },
+    [],
+  );
+
+  const completeChallenge = useCallback(
+    (day: number) => {
+      setChallengeState((prev) => {
+        const found = prev.find((d) => d.day === day);
+        // If already completed, noop
+        if (!found || found.completed) return prev;
+        const next = prev.map((d) => (d.day === day ? { ...d, completed: true } : d));
+
+        // Add a win for this completed challenge day
+        const amount = parseFloat(String(found.savingsEstimate).replace(/[^0-9.]/g, '')) || 0;
+        const win = {
+          id: Date.now().toString(),
+          type: 'challenge' as const,
+          description: `Day ${day}: ${found.title}`,
+          amount,
+          date: new Date().toISOString().split('T')[0],
+        };
+
+        // Use existing addWin (optimistic + backend sync)
+        addWin(win);
+
+        // Refresh wins to sync challenge completion to wins page
+        refreshWins();
+
+        return next;
+      });
+    },
+    [addWin, refreshWins],
+  );
+
+  const toggleLike = useCallback((postId: string) => {
     setLikedPosts((prev) => {
       const next = new Set(prev);
       if (next.has(postId)) next.delete(postId);
       else next.add(postId);
       return next;
     });
-  };
+  }, []);
 
-  const updateBudget = (categoryId: string, spent: number) => {
+  const updateBudget = useCallback((categoryId: string, spent: number) => {
     setBudget((prev) => prev.map((c) => (c.id === categoryId ? { ...c, spent } : c)));
-  };
+  }, []);
+
+  const setMonthlyBudget = useCallback((amount: number) => {
+    setMonthlyBudgetState(Math.max(0, amount));
+  }, []);
+
+  const addCategory = useCallback((category: Omit<BudgetCategory, 'id'>) => {
+    setBudget((prev) => [
+      ...prev,
+      {
+        ...category,
+        id: Date.now().toString(),
+      },
+    ]);
+  }, []);
+
+  const deleteCategory = useCallback((categoryId: string) => {
+    setBudget((prev) => prev.filter((c) => c.id !== categoryId));
+  }, []);
 
   return (
     <AppContext.Provider
@@ -68,11 +246,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         wins,
         challengeDays: challengeState,
         budget,
+        monthlyBudget,
         likedPosts,
+        loading,
         addWin,
         completeChallenge,
         toggleLike,
         updateBudget,
+        setMonthlyBudget,
+        addCategory,
+        deleteCategory,
+        refreshProfile,
+        refreshWins,
       }}
     >
       {children}

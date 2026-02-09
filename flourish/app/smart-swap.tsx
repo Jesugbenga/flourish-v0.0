@@ -6,24 +6,57 @@ import {
   TextInput,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { FlourishButton } from '@/components/ui/flourish-button';
 import { useApp } from '@/context/app-context';
+import { useAuthContext } from '@/context/auth-context';
+import { canAccess } from '@/lib/feature-gate';
+import { api, type SmartSwapResponse } from '@/lib/api';
+import { MOCK_MODE } from '@/lib/config';
 import { smartSwaps } from '@/data/mock-data';
 
 export default function SmartSwapScreen() {
   const { addWin } = useApp();
+  const { wins } = useApp();
+  const { hasPremium } = useAuthContext();
+  const router = useRouter();
+
   const [search, setSearch] = useState('');
   const [savedItems, setSavedItems] = useState<Set<string>>(new Set());
+  const [aiResult, setAiResult] = useState<SmartSwapResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
+  // Gate: redirect free users to paywall
+  const gated = !canAccess('smart-swap', hasPremium);
+
+  // Local mock-based filtering
   const filteredSwaps = search
     ? smartSwaps.filter((s) =>
         s.originalItem.toLowerCase().includes(search.toLowerCase())
       )
     : smartSwaps;
+
+  // AI-powered search (premium, non-mock)
+  const handleAiSearch = async () => {
+    if (!search.trim()) return;
+    if (gated) { router.push('/paywall'); return; }
+
+    setAiLoading(true);
+    setAiResult(null);
+    try {
+      const result = await api.smartSwap({ item: search.trim() });
+      setAiResult(result);
+    } catch {
+      // Fall back to local results
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleSaveSwap = (swap: (typeof smartSwaps)[0]) => {
     if (savedItems.has(swap.id)) return;
@@ -35,6 +68,15 @@ export default function SmartSwapScreen() {
       amount: swap.savingsWeekly,
       date: new Date().toISOString().split('T')[0],
     });
+  };
+
+  // derive saved items from wins so add-state persists across navigation
+  const isSwapSaved = (swapId: string, altName?: string) => {
+    // check local savedItems first
+    if (savedItems.has(swapId)) return true;
+    // check wins for matching description
+    if (altName && wins.some((w) => w.type === 'swap' && w.description.includes(altName))) return true;
+    return false;
   };
 
   return (
@@ -56,8 +98,72 @@ export default function SmartSwapScreen() {
           placeholderTextColor={Colors.textMuted}
           value={search}
           onChangeText={setSearch}
+          onSubmitEditing={!MOCK_MODE ? handleAiSearch : undefined}
+          returnKeyType="search"
         />
+        {!MOCK_MODE && (
+          <TouchableOpacity onPress={handleAiSearch} disabled={aiLoading}>
+            <Ionicons name="sparkles" size={20} color={Colors.sage} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* AI Loading */}
+      {aiLoading && (
+        <View style={styles.aiLoadingBox}>
+          <ActivityIndicator color={Colors.sage} />
+          <Text style={styles.aiLoadingText}>Finding smarter alternatives…</Text>
+        </View>
+      )}
+
+      {/* AI Results */}
+      {aiResult && (
+        <View style={styles.aiSection}>
+          <View style={styles.aiHeader}>
+            <Ionicons name="sparkles" size={16} color={Colors.sage} />
+            <Text style={styles.aiHeaderText}>AI Suggestions for "{aiResult.original}"</Text>
+          </View>
+          {aiResult.swaps.map((swap, index) => (
+            <Animated.View key={index} entering={FadeInDown.delay(index * 100).duration(400)}>
+              <View style={styles.swapCard}>
+                <View style={styles.comparisonRow}>
+                  <View style={styles.itemColumn}>
+                    <Text style={styles.itemName}>{swap.emoji} {swap.name}</Text>
+                    <Text style={styles.aiReason}>{swap.reason}</Text>
+                  </View>
+                  <View style={styles.saveBadgeAi}>
+                    <Text style={styles.saveBadgeAiText}>Save {swap.estimatedSaving}</Text>
+                  </View>
+                </View>
+                  <FlourishButton
+                    title={isSwapSaved(`ai-${index}`, swap.name) ? 'Added to wins ✓' : 'Add to my wins'}
+                    onPress={() => {
+                      if (isSwapSaved(`ai-${index}`, swap.name)) return;
+                      setSavedItems((prev) => new Set([...prev, `ai-${index}`]));
+                      const amount = parseFloat(swap.estimatedSaving.replace(/[^0-9.]/g, '')) || 0;
+                      addWin({
+                        id: Date.now().toString(),
+                        type: 'swap',
+                        description: `Switched to ${swap.name}`,
+                        amount,
+                        date: new Date().toISOString().split('T')[0],
+                      });
+                    }}
+                    variant={isSwapSaved(`ai-${index}`, swap.name) ? 'secondary' : 'primary'}
+                    fullWidth
+                    disabled={isSwapSaved(`ai-${index}`, swap.name)}
+                  />
+              </View>
+            </Animated.View>
+          ))}
+          {aiResult.tip && (
+            <View style={styles.aiTipBox}>
+              <Ionicons name="bulb" size={14} color={Colors.gold} />
+              <Text style={styles.aiTipText}>{aiResult.tip}</Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Swap Cards */}
       {filteredSwaps.map((swap, index) => (
@@ -116,12 +222,12 @@ export default function SmartSwapScreen() {
 
             {/* CTA */}
             <FlourishButton
-              title={savedItems.has(swap.id) ? 'Added to wins ✓' : 'Add to my wins'}
+              title={isSwapSaved(swap.id, swap.alternative) ? 'Added to wins ✓' : 'Add to my wins'}
               onPress={() => handleSaveSwap(swap)}
-              variant={savedItems.has(swap.id) ? 'secondary' : 'primary'}
+              variant={isSwapSaved(swap.id, swap.alternative) ? 'secondary' : 'primary'}
               fullWidth
-              disabled={savedItems.has(swap.id)}
-              icon={savedItems.has(swap.id) ? 'checkmark-circle' : 'add-circle'}
+              disabled={isSwapSaved(swap.id, swap.alternative)}
+              icon={isSwapSaved(swap.id, swap.alternative) ? 'checkmark-circle' : 'add-circle'}
             />
           </View>
         </Animated.View>
@@ -204,4 +310,41 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   confidenceText: { ...Typography.caption1, color: Colors.textSecondary },
+  // AI section styles
+  aiLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    justifyContent: 'center',
+    padding: Spacing.lg,
+  },
+  aiLoadingText: { ...Typography.subhead, color: Colors.textSecondary },
+  aiSection: { marginBottom: Spacing.xl },
+  aiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: Spacing.md,
+  },
+  aiHeaderText: { ...Typography.headline, color: Colors.text },
+  aiReason: { ...Typography.caption1, color: Colors.textSecondary, marginTop: 2 },
+  saveBadgeAi: {
+    backgroundColor: Colors.sageLight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.full,
+    alignSelf: 'flex-start',
+    marginLeft: Spacing.sm,
+  },
+  saveBadgeAiText: { ...Typography.caption1, fontWeight: '600', color: Colors.sageDark },
+  aiTipBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: Colors.goldLight,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.sm,
+  },
+  aiTipText: { ...Typography.caption1, color: Colors.text, flex: 1 },
 });

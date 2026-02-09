@@ -1,19 +1,45 @@
 import { useState } from 'react';
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { FlourishButton } from '@/components/ui/flourish-button';
 import { useApp } from '@/context/app-context';
+import { useAuthContext } from '@/context/auth-context';
+import { canAccess } from '@/lib/feature-gate';
+import { api, type MealPlanResponse } from '@/lib/api';
+import { MOCK_MODE } from '@/lib/config';
 import { mealPlans } from '@/data/mock-data';
 
 export default function MealPlannerScreen() {
   const { addWin } = useApp();
+  const { wins } = useApp();
+  const { hasPremium } = useAuthContext();
+  const router = useRouter();
+
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
   const [addedMeals, setAddedMeals] = useState<Set<string>>(new Set());
+  const [aiPlan, setAiPlan] = useState<MealPlanResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const gated = !canAccess('meal-planner', hasPremium);
 
   const totalCost = mealPlans.reduce((sum, m) => sum + m.costPerServing * 4, 0);
   const totalSavings = mealPlans.reduce((sum, m) => sum + m.savingsVsTakeout, 0);
+
+  const handleGenerateAiPlan = async () => {
+    if (gated) { router.push('/paywall'); return; }
+    setAiLoading(true);
+    try {
+      const result = await api.mealPlan({ days: 5, budget: 40, numPeople: 3 });
+      setAiPlan(result);
+    } catch {
+      // Keep local meals
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleAddMeal = (meal: (typeof mealPlans)[0]) => {
     if (addedMeals.has(meal.id)) return;
@@ -27,6 +53,12 @@ export default function MealPlannerScreen() {
     });
   };
 
+  const isMealAdded = (mealId: string, mealName?: string) => {
+    if (addedMeals.has(mealId)) return true;
+    if (mealName && wins.some((w) => w.type === 'meal' && w.description.includes(mealName))) return true;
+    return false;
+  };
+
   return (
     <ScrollView
       style={styles.container}
@@ -36,6 +68,63 @@ export default function MealPlannerScreen() {
       <Text style={styles.intro}>
         Quick meals that save money and reduce decision fatigue.
       </Text>
+
+      {/* AI Generate Button */}
+      {!MOCK_MODE && (
+        <FlourishButton
+          title={aiLoading ? 'Generating plan…' : '✨ Generate AI Meal Plan'}
+          onPress={handleGenerateAiPlan}
+          fullWidth
+          variant={gated ? 'outline' : 'primary'}
+          disabled={aiLoading}
+          icon={gated ? 'lock-closed' : 'sparkles'}
+          style={{ marginBottom: Spacing.lg }}
+        />
+      )}
+
+      {/* AI Loading */}
+      {aiLoading && (
+        <View style={{ alignItems: 'center', padding: Spacing.lg }}>
+          <ActivityIndicator color={Colors.sage} />
+          <Text style={{ ...Typography.subhead, color: Colors.textSecondary, marginTop: Spacing.sm }}>
+            Creating your personalised meal plan…
+          </Text>
+        </View>
+      )}
+
+      {/* AI Meal Plan Results */}
+      {aiPlan && (
+        <View style={{ marginBottom: Spacing.xl }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md }}>
+            <Ionicons name="sparkles" size={16} color={Colors.sage} />
+            <Text style={{ ...Typography.headline, color: Colors.text }}>Your AI Meal Plan</Text>
+          </View>
+          {aiPlan.days.map((day, i) => (
+            <Animated.View key={i} entering={FadeInDown.delay(i * 80).duration(400)}>
+              <View style={styles.mealCard}>
+                <Text style={styles.mealName}>{day.day}</Text>
+                {Object.entries(day.meals).map(([type, meal]) => (
+                  <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
+                    <Text style={{ ...Typography.subhead, color: Colors.text, textTransform: 'capitalize' }}>
+                      {meal.emoji} {type}: {meal.name}
+                    </Text>
+                    <Text style={{ ...Typography.caption1, color: Colors.textSecondary }}>{meal.estimatedCost}</Text>
+                  </View>
+                ))}
+              </View>
+            </Animated.View>
+          ))}
+          {aiPlan.tips.length > 0 && (
+            <View style={{ backgroundColor: Colors.sageLight, padding: Spacing.md, borderRadius: BorderRadius.md }}>
+              {aiPlan.tips.map((tip, i) => (
+                <Text key={i} style={{ ...Typography.caption1, color: Colors.sageDark, marginBottom: 4 }}>
+                  💡 {tip}
+                </Text>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Summary Card */}
       <View style={styles.summaryCard}>
@@ -130,11 +219,11 @@ export default function MealPlannerScreen() {
                 </View>
 
                 <FlourishButton
-                  title={addedMeals.has(meal.id) ? 'Added to plan ✓' : 'Add to my plan'}
+                  title={isMealAdded(meal.id, meal.name) ? 'Added to plan ✓' : 'Add to my plan'}
                   onPress={() => handleAddMeal(meal)}
-                  variant={addedMeals.has(meal.id) ? 'secondary' : 'primary'}
+                  variant={isMealAdded(meal.id, meal.name) ? 'secondary' : 'primary'}
                   fullWidth
-                  disabled={addedMeals.has(meal.id)}
+                  disabled={isMealAdded(meal.id, meal.name)}
                 />
               </View>
             )}
