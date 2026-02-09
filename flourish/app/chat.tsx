@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Animated } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
@@ -44,6 +45,7 @@ const TypingDots = () => {
 // ── Chat Screen ───────────────────────────
 export default function ChatScreen() {
   const { hasPremium } = useAuthContext();
+  const router = useRouter();
   const allowed = canAccess('ai-chat', hasPremium);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState('');
@@ -101,7 +103,7 @@ export default function ChatScreen() {
             </View>
             <Text style={styles.lockTitle}>Premium Feature</Text>
             <Text style={styles.lockSub}>Chat with Flo for personalised financial guidance tailored to your goals.</Text>
-            <TouchableOpacity style={styles.upgradeBtn} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.upgradeBtn} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
               <Ionicons name="sparkles" size={16} color={Colors.background} />
               <Text style={styles.upgradeBtnText}>Upgrade to Premium</Text>
             </TouchableOpacity>

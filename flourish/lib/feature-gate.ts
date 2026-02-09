@@ -28,7 +28,7 @@ const rules: Record<Feature, GateRule> = {
   'goal-calculator': { free: false, label: 'Goal Calculator' },
   'challenges':      { free: true,  label: 'Weekly Challenges' },   // free users get basic ones
   'community-post':  { free: false, label: 'Community Posting' },
-  'ai-chat':         { free: true, label: 'Chat with Flo' },
+  'ai-chat':         { free: false, label: 'Chat with Flo' },
   'lessons':         { free: true,  label: 'Lessons' },             // free users see first card
   'rebeccas-corner': { free: false, label: "Rebecca's Corner" },
 };
