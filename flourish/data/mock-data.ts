@@ -15,13 +15,13 @@ import type {
 // ─── User Profile ──────────────────────────────────────────────────────
 
 export const userProfile: UserProfile = {
-  name: 'Rebecca',
-  totalSavings: 128.4,
-  swapSavings: 42.6,
-  mealSavings: 52.8,
-  budgetSavings: 18.0,
-  challengeSavings: 15.0,
-  streak: 12,
+  name: '',
+  totalSavings: 0,
+  swapSavings: 0,
+  mealSavings: 0,
+  budgetSavings: 0,
+  challengeSavings: 0,
+  streak: 0,
   joinDate: '2025-12-01',
 };
 
@@ -205,43 +205,7 @@ export const budgetCategories: BudgetCategory[] = [
 
 // ─── Recent Wins ───────────────────────────────────────────────────────
 
-export const recentWins: SavingsWin[] = [
-  {
-    id: '1',
-    type: 'swap',
-    description: 'Switched to store-brand cereal',
-    amount: 2.55,
-    date: '2026-02-07',
-  },
-  {
-    id: '2',
-    type: 'meal',
-    description: 'Batch cooked Sunday meals',
-    amount: 18.5,
-    date: '2026-02-05',
-  },
-  {
-    id: '3',
-    type: 'swap',
-    description: 'Found cheaper washing liquid',
-    amount: 1.61,
-    date: '2026-02-04',
-  },
-  {
-    id: '4',
-    type: 'budget',
-    description: 'Optimised grocery list',
-    amount: 8.4,
-    date: '2026-02-03',
-  },
-  {
-    id: '5',
-    type: 'challenge',
-    description: 'Day 3: No-spend evening',
-    amount: 12.0,
-    date: '2026-02-02',
-  },
-];
+export const recentWins: SavingsWin[] = [];
 
 // ─── 7-Day Challenge ───────────────────────────────────────────────────
 

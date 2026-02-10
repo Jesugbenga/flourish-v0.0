@@ -10,7 +10,6 @@
 
 import type { Request, Response } from 'express';
 import { requireAuth } from '../../middleware/require-auth';
-import { requirePremium } from '../../middleware/require-premium';
 import { db } from '../../lib/firebase';
 import { sendSuccess, sendError, assertMethod, Errors } from '../../lib/errors';
 import type { StartChallengePayload } from '../../types';
@@ -39,10 +38,8 @@ export default async function handler(req: Request, res: Response) {
 
     const challenge = { id: chalSnap.id, ...chalSnap.data()! };
 
-    // ── Premium gate ──────────────────────
-    if ((challenge as any).is_premium) {
-      if (!requirePremium(user, res)) return;
-    }
+    // ── Premium gate (disabled for MVP — client-side gating only) ──
+    // if ((challenge as any).is_premium) { ... }
 
     // ── Check if already started ──────────
     const ucRef = db.collection('users').doc(user.id).collection('userChallenges');

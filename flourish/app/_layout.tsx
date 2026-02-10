@@ -7,7 +7,6 @@ import 'react-native-reanimated';
 import { AppProvider } from '@/context/app-context';
 import { AuthProvider, useAuthContext } from '@/context/auth-context';
 import { Colors } from '@/constants/theme';
-import { MOCK_MODE } from '@/lib/config';
 import { useEffect } from 'react';
 
 const FlourishTheme = {
@@ -39,9 +38,6 @@ function InitGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isReady) return;
-
-    // In mock mode, skip all auth routing
-    if (MOCK_MODE) return;
 
     const inAuthGroup = segments[0] === 'auth';
     const inOnboarding = segments[0] === 'onboarding';

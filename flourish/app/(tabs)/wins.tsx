@@ -41,6 +41,12 @@ export default function WinsScreen() {
   const completedDays = challengeDays.filter((d) => d.completed).length;
   const totalChallengeDays = challengeDays.length;
 
+  // Helper: safe number formatting — fall back to 0.00 when value is missing
+  const formatNumber = (v?: number | null) => {
+    const n = Number(v ?? 0) || 0;
+    return n.toFixed(2);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
@@ -60,7 +66,7 @@ export default function WinsScreen() {
         {/* ── Total Savings ── */}
         <Animated.View entering={FadeInUp.duration(600)} style={styles.totalCard}>
           <Text style={styles.totalLabel}>Total Saved</Text>
-          <Text style={styles.totalAmount}>£{user.totalSavings.toFixed(2)}</Text>
+          <Text style={styles.totalAmount}>£{formatNumber(user.totalSavings)}</Text>
           <Text style={styles.totalSub}>Since you started Flourish</Text>
         </Animated.View>
 
@@ -81,7 +87,7 @@ export default function WinsScreen() {
                 <View style={[styles.breakdownIcon, { backgroundColor: config.color + '18' }]}>
                   <Ionicons name={config.icon} size={20} color={config.color} />
                 </View>
-                <Text style={styles.breakdownAmount}>£{amount.toFixed(2)}</Text>
+                <Text style={styles.breakdownAmount}>£{formatNumber(amount)}</Text>
                 <Text style={styles.breakdownLabel}>{config.label}</Text>
               </View>
             );
@@ -130,7 +136,7 @@ export default function WinsScreen() {
                   <Text style={styles.winDesc}>{win.description}</Text>
                   <Text style={styles.winDate}>{win.date}</Text>
                 </View>
-                <Text style={styles.winAmount}>+£{win.amount.toFixed(2)}</Text>
+                <Text style={styles.winAmount}>+£{formatNumber(win.amount)}</Text>
               </View>
             </Animated.View>
           );

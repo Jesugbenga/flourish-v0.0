@@ -20,7 +20,6 @@ import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/
 import { FlourishButton } from '@/components/ui/flourish-button';
 import { useAuthContext } from '@/context/auth-context';
 import { api } from '@/lib/api';
-import { MOCK_MODE } from '@/lib/config';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -35,14 +34,12 @@ export default function OnboardingScreen() {
   const handleFinish = async () => {
     setSaving(true);
     try {
-      if (!MOCK_MODE) {
-        await api.updateProfile({
+      await api.updateProfile({
           displayName: name || undefined,
           numKids: numKids ? parseInt(numKids, 10) : undefined,
           monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : undefined,
           savingsGoal: savingsGoal ? parseFloat(savingsGoal) : undefined,
         });
-      }
       setOnboardingComplete(true);
       router.replace('/(tabs)');
     } catch (err) {

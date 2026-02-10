@@ -94,13 +94,19 @@ export default function SignInScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Back button */}
-          <FlourishButton
-            title="← Back"
-            onPress={() => setMode('options')}
-            variant="outline"
-            style={{ marginBottom: Spacing.lg }}
-          />
+          {/* Back icon button (top left) */}
+          <View style={styles.backButtonContainer}>
+            <View style={styles.backButtonCircle}>
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={Colors.sageDark}
+                onPress={() => setMode('options')}
+                style={{ alignSelf: 'center' }}
+                accessibilityLabel="Back"
+              />
+            </View>
+          </View>
 
           {/* Heading */}
           <Text style={styles.heading}>{isSignUp ? 'Create account' : 'Sign in'}</Text>
@@ -237,6 +243,25 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
+  },
+  backButtonContainer: {
+    position: 'absolute',
+    top: 24,
+    left: 16,
+    zIndex: 10,
+  },
+  backButtonCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.sageLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   content: {
     flex: 1,

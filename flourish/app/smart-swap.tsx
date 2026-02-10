@@ -16,8 +16,7 @@ import { FlourishButton } from '@/components/ui/flourish-button';
 import { useApp } from '@/context/app-context';
 import { useAuthContext } from '@/context/auth-context';
 import { canAccess } from '@/lib/feature-gate';
-import { api, type SmartSwapResponse } from '@/lib/api';
-import { MOCK_MODE } from '@/lib/config';
+import { smartSwapWithGemini, type SmartSwapResponse } from '@/lib/gemini-client';
 import { smartSwaps } from '@/data/mock-data';
 
 export default function SmartSwapScreen() {
@@ -49,14 +48,39 @@ export default function SmartSwapScreen() {
     setAiLoading(true);
     setAiResult(null);
     try {
-      const result = await api.smartSwap({ item: search.trim() });
+      const result = await smartSwapWithGemini('demo-user', { item: search.trim() });
       setAiResult(result);
-    } catch {
+    } catch (err) {
+      console.error('Smart swap error:', err);
       // Fall back to local results
     } finally {
       setAiLoading(false);
     }
   };
+
+  // Convert AI response into UI-friendly swap cards similar to `smartSwaps`
+  const buildAiSwapCards = (resp: SmartSwapResponse | null) => {
+    if (!resp) return [] as typeof smartSwaps;
+    const orig = resp.original || search || 'Item';
+    return resp.swaps.map((s, i) => {
+      const savingsWeekly = parseFloat((s.estimatedSaving || '').replace(/[^0-9.]/g, '')) || 0;
+      const savingsYearly = Math.round(savingsWeekly * 52 * 100) / 100;
+      return {
+        id: `ai-${i}`,
+        originalItem: orig,
+        originalPrice: 0,
+        alternative: s.name || 'Alternative',
+        alternativePrice: Math.max(0, (0 + (savingsWeekly ? 0 : 0))),
+        savingsWeekly,
+        savingsYearly,
+        confidence: 75,
+        reason: s.reason || '',
+        emoji: s.emoji || '🛒',
+      } as any;
+    });
+  };
+
+  const aiSwapCards = buildAiSwapCards(aiResult);
 
   const handleSaveSwap = (swap: (typeof smartSwaps)[0]) => {
     if (savedItems.has(swap.id)) return;
@@ -98,14 +122,12 @@ export default function SmartSwapScreen() {
           placeholderTextColor={Colors.textMuted}
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={!MOCK_MODE ? handleAiSearch : undefined}
+          onSubmitEditing={handleAiSearch}
           returnKeyType="search"
         />
-        {!MOCK_MODE && (
-          <TouchableOpacity onPress={handleAiSearch} disabled={aiLoading}>
-            <Ionicons name="sparkles" size={20} color={Colors.sage} />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity onPress={handleAiSearch} disabled={aiLoading}>
+          <Ionicons name="sparkles" size={20} color={Colors.sage} />
+        </TouchableOpacity>
       </View>
 
       {/* AI Loading */}
@@ -116,52 +138,54 @@ export default function SmartSwapScreen() {
         </View>
       )}
 
-      {/* AI Results */}
-      {aiResult && (
+      {/* AI Results rendered as swap cards to match mock data */}
+      {aiSwapCards.length > 0 && (
         <View style={styles.aiSection}>
           <View style={styles.aiHeader}>
             <Ionicons name="sparkles" size={16} color={Colors.sage} />
-            <Text style={styles.aiHeaderText}>AI Suggestions for "{aiResult.original}"</Text>
+            <Text style={styles.aiHeaderText}>AI Suggestions for "{aiSwapCards[0].originalItem}"</Text>
           </View>
-          {aiResult.swaps.map((swap, index) => (
-            <Animated.View key={index} entering={FadeInDown.delay(index * 100).duration(400)}>
+
+          {aiSwapCards.map((swap, index) => (
+            <Animated.View key={swap.id} entering={FadeInDown.delay(index * 100).duration(400)}>
               <View style={styles.swapCard}>
                 <View style={styles.comparisonRow}>
                   <View style={styles.itemColumn}>
-                    <Text style={styles.itemName}>{swap.emoji} {swap.name}</Text>
+                    <View style={[styles.itemBadge, { backgroundColor: Colors.successLight }]}>
+                      <Text style={[styles.itemBadgeText, { color: Colors.sage }]}>Switch to</Text>
+                    </View>
+                    <Text style={styles.itemName}>{swap.emoji} {swap.alternative}</Text>
+                    <Text style={[styles.itemPrice, { color: Colors.sage }]}>£{(swap.alternativePrice || 0).toFixed(2)}</Text>
                     <Text style={styles.aiReason}>{swap.reason}</Text>
                   </View>
+
                   <View style={styles.saveBadgeAi}>
-                    <Text style={styles.saveBadgeAiText}>Save {swap.estimatedSaving}</Text>
+                    <Text style={styles.saveBadgeAiText}>Save £{(swap.savingsWeekly || 0).toFixed(2)}/week</Text>
                   </View>
                 </View>
-                  <FlourishButton
-                    title={isSwapSaved(`ai-${index}`, swap.name) ? 'Added to wins ✓' : 'Add to my wins'}
-                    onPress={() => {
-                      if (isSwapSaved(`ai-${index}`, swap.name)) return;
-                      setSavedItems((prev) => new Set([...prev, `ai-${index}`]));
-                      const amount = parseFloat(swap.estimatedSaving.replace(/[^0-9.]/g, '')) || 0;
-                      addWin({
-                        id: Date.now().toString(),
-                        type: 'swap',
-                        description: `Switched to ${swap.name}`,
-                        amount,
-                        date: new Date().toISOString().split('T')[0],
-                      });
-                    }}
-                    variant={isSwapSaved(`ai-${index}`, swap.name) ? 'secondary' : 'primary'}
-                    fullWidth
-                    disabled={isSwapSaved(`ai-${index}`, swap.name)}
-                  />
+
+                <FlourishButton
+                  title={isSwapSaved(swap.id, swap.alternative) ? 'Added to wins ✓' : 'Add to my wins'}
+                  onPress={() => {
+                    if (isSwapSaved(swap.id, swap.alternative)) return;
+                    setSavedItems((prev) => new Set([...prev, swap.id]));
+                    const amount = parseFloat(String(swap.savingsWeekly)) || 0;
+                    addWin({
+                      id: Date.now().toString(),
+                      type: 'swap',
+                      description: `Switched to ${swap.alternative}`,
+                      amount,
+                      date: new Date().toISOString().split('T')[0],
+                    });
+                  }}
+                  variant={isSwapSaved(swap.id, swap.alternative) ? 'secondary' : 'primary'}
+                  fullWidth
+                  disabled={isSwapSaved(swap.id, swap.alternative)}
+                />
               </View>
             </Animated.View>
           ))}
-          {aiResult.tip && (
-            <View style={styles.aiTipBox}>
-              <Ionicons name="bulb" size={14} color={Colors.gold} />
-              <Text style={styles.aiTipText}>{aiResult.tip}</Text>
-            </View>
-          )}
+
         </View>
       )}
 

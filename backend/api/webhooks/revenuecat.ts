@@ -19,8 +19,17 @@ export default async function handler(req: Request, res: Response) {
   if (!assertMethod(req.method, 'POST', res)) return;
 
   try {
+    // ── Derive raw body string (works with Buffer / string / parsed object) ──
+    let rawBody: string;
+    if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString('utf8');
+    } else if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else {
+      rawBody = JSON.stringify(req.body);
+    }
+
     // ── Verify webhook signature ──────────
-    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
     const signature = req.headers['x-revenuecat-signature'] as string | undefined;
 
     if (!verifyWebhookSignature(rawBody, signature)) {
@@ -30,7 +39,13 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // ── Parse event ───────────────────────
-    const payload = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as RevenueCatWebhookEvent;
+    let payload: RevenueCatWebhookEvent;
+    try {
+      payload = JSON.parse(rawBody) as RevenueCatWebhookEvent;
+    } catch {
+      sendError(res, Errors.badRequest('Invalid JSON body'));
+      return;
+    }
     const event = payload.event;
 
     if (!event?.type || !event?.app_user_id) {

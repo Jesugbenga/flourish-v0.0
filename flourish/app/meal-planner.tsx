@@ -8,8 +8,7 @@ import { FlourishButton } from '@/components/ui/flourish-button';
 import { useApp } from '@/context/app-context';
 import { useAuthContext } from '@/context/auth-context';
 import { canAccess } from '@/lib/feature-gate';
-import { api, type MealPlanResponse } from '@/lib/api';
-import { MOCK_MODE } from '@/lib/config';
+import { mealPlanWithGemini, type MealPlanResponse } from '@/lib/gemini-client';
 import { mealPlans } from '@/data/mock-data';
 
 export default function MealPlannerScreen() {
@@ -32,14 +31,46 @@ export default function MealPlannerScreen() {
     if (gated) { router.push('/paywall'); return; }
     setAiLoading(true);
     try {
-      const result = await api.mealPlan({ days: 5, budget: 40, numPeople: 3 });
+      const result = await mealPlanWithGemini('demo-user', { days: 5, budget: 40, numPeople: 3 });
       setAiPlan(result);
-    } catch {
+    } catch (err) {
+      console.error('Meal plan error:', err);
       // Keep local meals
     } finally {
       setAiLoading(false);
     }
   };
+
+  // Convert AI plan to UI-friendly meal card objects (match mock `mealPlans` shape)
+  const buildAiMeals = (plan: MealPlanResponse | null) => {
+    if (!plan) return [] as typeof mealPlans;
+    const cards: Array<any> = [];
+    plan.days.forEach((day, dayIndex) => {
+      const mealEntries = Object.entries(day.meals || {});
+      mealEntries.forEach(([type, meal]) => {
+        const id = `ai-${dayIndex}-${type}`;
+        const name = `${meal.emoji ? meal.emoji + ' ' : ''}${meal.name}`.trim();
+        // estimatedCost is like '£3.00' — parse numeric
+        const costNum = parseFloat((meal.estimatedCost || '£0').replace(/[^0-9.]/g, '')) || 0;
+        const costPerServing = Number((costNum).toFixed(2));
+        const savingsVsTakeout = Math.max(0, Math.round(costPerServing * 2)); // heuristic
+
+        cards.push({
+          id,
+          name,
+          costPerServing,
+          savingsVsTakeout,
+          prepTime: '25 min',
+          tags: ['AI Plan'],
+          ingredients: [],
+          steps: [],
+        });
+      });
+    });
+    return cards;
+  };
+
+  const aiMeals = buildAiMeals(aiPlan);
 
   const handleAddMeal = (meal: (typeof mealPlans)[0]) => {
     if (addedMeals.has(meal.id)) return;
@@ -70,9 +101,8 @@ export default function MealPlannerScreen() {
       </Text>
 
       {/* AI Generate Button */}
-      {!MOCK_MODE && (
-        <FlourishButton
-          title={aiLoading ? 'Generating plan…' : '✨ Generate AI Meal Plan'}
+      <FlourishButton
+          title={aiLoading ? 'Generating plan…' : 'Generate AI Meal Plan'}
           onPress={handleGenerateAiPlan}
           fullWidth
           variant={gated ? 'outline' : 'primary'}
@@ -80,7 +110,6 @@ export default function MealPlannerScreen() {
           icon={gated ? 'lock-closed' : 'sparkles'}
           style={{ marginBottom: Spacing.lg }}
         />
-      )}
 
       {/* AI Loading */}
       {aiLoading && (
@@ -92,34 +121,101 @@ export default function MealPlannerScreen() {
         </View>
       )}
 
-      {/* AI Meal Plan Results */}
-      {aiPlan && (
+      {/* AI Meal Plan Results rendered as meal cards */}
+      {aiMeals.length > 0 && (
         <View style={{ marginBottom: Spacing.xl }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.md }}>
             <Ionicons name="sparkles" size={16} color={Colors.sage} />
             <Text style={{ ...Typography.headline, color: Colors.text }}>Your AI Meal Plan</Text>
           </View>
-          {aiPlan.days.map((day, i) => (
-            <Animated.View key={i} entering={FadeInDown.delay(i * 80).duration(400)}>
-              <View style={styles.mealCard}>
-                <Text style={styles.mealName}>{day.day}</Text>
-                {Object.entries(day.meals).map(([type, meal]) => (
-                  <View key={type} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 }}>
-                    <Text style={{ ...Typography.subhead, color: Colors.text, textTransform: 'capitalize' }}>
-                      {meal.emoji} {type}: {meal.name}
-                    </Text>
-                    <Text style={{ ...Typography.caption1, color: Colors.textSecondary }}>{meal.estimatedCost}</Text>
+
+          {aiMeals.map((meal, index) => (
+            <Animated.View key={meal.id} entering={FadeInDown.delay(index * 80).duration(400)}>
+              <TouchableOpacity
+                style={styles.mealCard}
+                activeOpacity={0.8}
+                onPress={() => setExpandedMeal(expandedMeal === meal.id ? null : meal.id)}
+              >
+                <View style={styles.mealHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.mealName}>{meal.name}</Text>
+                    <View style={styles.mealMeta}>
+                      <View style={styles.metaChip}>
+                        <Ionicons name="time-outline" size={12} color={Colors.textSecondary} />
+                        <Text style={styles.metaText}>{meal.prepTime}</Text>
+                      </View>
+                      <View style={styles.metaChip}>
+                        <Ionicons name="cash-outline" size={12} color={Colors.sage} />
+                        <Text style={[styles.metaText, { color: Colors.sage }]}>£{meal.costPerServing.toFixed(2)}/serving</Text>
+                      </View>
+                    </View>
                   </View>
-                ))}
-              </View>
+                  <View style={styles.saveBadge}>
+                    <Text style={styles.saveBadgeText}>Save £{meal.savingsVsTakeout.toFixed(2)}</Text>
+                  </View>
+                </View>
+
+                {/* Tags */}
+                <View style={styles.tagsRow}>
+                  {meal.tags.map((tag: string) => (
+                    <View key={tag} style={styles.tag}>
+                      <Text style={styles.tagText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {expandedMeal === meal.id && (
+                  <View style={styles.expandedContent}>
+                    <Text style={styles.expandedTitle}>Ingredients</Text>
+                    {meal.ingredients.length > 0 ? (
+                      meal.ingredients.map((ing: string, i: number) => (
+                        <Text key={i} style={styles.ingredientText}>• {ing}</Text>
+                      ))
+                    ) : (
+                      <Text style={styles.ingredientText}>• Simple pantry-friendly ingredients</Text>
+                    )}
+
+                    <Text style={[styles.expandedTitle, { marginTop: Spacing.md }]}>Steps</Text>
+                    {meal.steps.length > 0 ? (
+                      meal.steps.map((step: string, i: number) => (
+                        <View key={i} style={styles.stepRow}>
+                          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>{i + 1}</Text></View>
+                          <Text style={styles.stepText}>{step}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.ingredientText}>Quick steps provided by AI</Text>
+                    )}
+
+                    <View style={styles.whySaves}>
+                      <Ionicons name="leaf" size={14} color={Colors.sageDark} />
+                      <Text style={styles.whySavesText}>This is estimated to save compared to takeout.</Text>
+                    </View>
+
+                    <FlourishButton
+                      title={isMealAdded(meal.id, meal.name) ? 'Added to plan ✓' : 'Add to my plan'}
+                      onPress={() => handleAddMeal(meal)}
+                      variant={isMealAdded(meal.id, meal.name) ? 'secondary' : 'primary'}
+                      fullWidth
+                      disabled={isMealAdded(meal.id, meal.name)}
+                    />
+                  </View>
+                )}
+
+                {expandedMeal !== meal.id && (
+                  <View style={styles.expandHint}>
+                    <Text style={styles.expandHintText}>Tap to see recipe</Text>
+                    <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+                  </View>
+                )}
+              </TouchableOpacity>
             </Animated.View>
           ))}
-          {aiPlan.tips.length > 0 && (
+
+          {aiPlan && aiPlan.tips.length > 0 && (
             <View style={{ backgroundColor: Colors.sageLight, padding: Spacing.md, borderRadius: BorderRadius.md }}>
               {aiPlan.tips.map((tip, i) => (
-                <Text key={i} style={{ ...Typography.caption1, color: Colors.sageDark, marginBottom: 4 }}>
-                  💡 {tip}
-                </Text>
+                <Text key={i} style={{ ...Typography.caption1, color: Colors.sageDark, marginBottom: 4 }}>💡 {tip}</Text>
               ))}
             </View>
           )}

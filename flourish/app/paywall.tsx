@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Purchases from 'react-native-purchases';
+import Purchases, {
+  type PurchasesOfferings,
+  type PurchasesPackage,
+} from 'react-native-purchases';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
 import { FlourishButton } from '@/components/ui/flourish-button';
 import { useAuthContext } from '@/context/auth-context';
-import { MOCK_MODE } from '@/lib/config';
+import { PREMIUM_ENTITLEMENT } from '@/lib/config';
 
 const features = [
   { icon: 'swap-horizontal' as const, title: 'Unlimited Smart Swaps', sub: 'Find savings on everything' },
@@ -21,29 +24,36 @@ const features = [
 export default function PaywallScreen() {
   const router = useRouter();
   const { refreshPremium } = useAuthContext();
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
+  const [offerings, setOfferings] = useState<PurchasesOfferings | null>(null);
   const [purchasing, setPurchasing] = useState(false);
 
-  const handlePurchase = async () => {
-    if (MOCK_MODE) {
-      Alert.alert('Mock Mode', 'Purchases are disabled in mock mode.');
-      router.back();
-      return;
-    }
+  // ── Fetch RevenueCat offerings on mount ──
+  useEffect(() => {
+    const fetchOfferings = async () => {
+      try {
+        const result = await Purchases.getOfferings();
+        if (result.current && result.current.availablePackages.length > 0) {
+          setOfferings(result);
+        }
+      } catch (err) {
+        console.error('[Paywall] Failed to fetch offerings:', err);
+      }
+    };
+    fetchOfferings();
+  }, []);
 
+  // ── Handle purchase ──
+  const handlePurchase = async (pkg: PurchasesPackage) => {
     setPurchasing(true);
     try {
-      const offerings = await Purchases.getOfferings();
-      const pkg = selectedPlan === 'annual'
-        ? offerings.current?.annual
-        : offerings.current?.monthly;
+      const { customerInfo } = await Purchases.purchasePackage(pkg);
 
-      if (pkg) {
-        await Purchases.purchasePackage(pkg);
+      if (customerInfo.entitlements.active[PREMIUM_ENTITLEMENT] !== undefined) {
+        // Refresh in-memory state so the whole app unlocks
         await refreshPremium();
         router.back();
       } else {
-        Alert.alert('Error', 'No packages available. Please try again later.');
+        Alert.alert('Missing entitlement', 'Purchase succeeded but premium access not activated. Please restart the app.');
       }
     } catch (e: unknown) {
       const err = e as { userCancelled?: boolean };
@@ -54,6 +64,18 @@ export default function PaywallScreen() {
       setPurchasing(false);
     }
   };
+
+  // ── Helper: label a package nicely ──
+  const packageLabel = (pkg: PurchasesPackage) => {
+    const type = pkg.packageType.toLowerCase();
+    if (type.includes('annual')) return 'Annual';
+    if (type.includes('month')) return 'Monthly';
+    if (type.includes('week')) return 'Weekly';
+    return pkg.product.title;
+  };
+
+  const isPopular = (pkg: PurchasesPackage) =>
+    pkg.packageType.toLowerCase().includes('annual');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -92,37 +114,45 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        {/* Pricing */}
+        {/* Pricing — dynamically rendered from RevenueCat packages */}
         <View style={styles.pricingSection}>
-          <TouchableOpacity
-            style={[styles.priceCard, selectedPlan === 'monthly' && styles.priceCardHighlighted]}
-            onPress={() => setSelectedPlan('monthly')}
-          >
-            <Text style={styles.priceLabel}>Monthly</Text>
-            <Text style={styles.priceAmount}>£4.99</Text>
-            <Text style={styles.pricePer}>/month</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.priceCard, selectedPlan === 'annual' && styles.priceCardHighlighted]}
-            onPress={() => setSelectedPlan('annual')}
-          >
-            <View style={styles.bestValueBadge}>
-              <Text style={styles.bestValueText}>Best Value</Text>
-            </View>
-            <Text style={styles.priceLabel}>Annual</Text>
-            <Text style={[styles.priceAmount, selectedPlan === 'annual' && { color: Colors.sageDark }]}>£39.99</Text>
-            <Text style={styles.pricePer}>/year</Text>
-            <Text style={styles.priceSave}>Save 33%</Text>
-          </TouchableOpacity>
+          {offerings?.current?.availablePackages.map((pkg) => (
+            <TouchableOpacity
+              key={pkg.identifier}
+              style={[styles.priceCard, isPopular(pkg) && styles.priceCardHighlighted]}
+              onPress={() => handlePurchase(pkg)}
+              disabled={purchasing}
+            >
+              {isPopular(pkg) && (
+                <View style={styles.bestValueBadge}>
+                  <Text style={styles.bestValueText}>Best Value</Text>
+                </View>
+              )}
+              <Text style={styles.priceLabel}>{packageLabel(pkg)}</Text>
+              <Text style={[styles.priceAmount, isPopular(pkg) && { color: Colors.sageDark }]}>
+                {pkg.product.priceString}
+              </Text>
+              <Text style={styles.pricePer}>/{pkg.packageType.toLowerCase()}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
+
+        {!offerings && (
+          <Text style={[styles.legalText, { marginBottom: Spacing.md }]}>
+            Loading plans…
+          </Text>
+        )}
 
         <FlourishButton
           title={purchasing ? 'Processing…' : 'Start 7-day free trial'}
-          onPress={handlePurchase}
+          onPress={() => {
+            // Default to the annual package if available
+            const pkg = offerings?.current?.annual ?? offerings?.current?.availablePackages[0];
+            if (pkg) handlePurchase(pkg);
+          }}
           fullWidth
           size="lg"
-          disabled={purchasing}
+          disabled={purchasing || !offerings}
           style={{ marginBottom: Spacing.md }}
         />
 
@@ -183,9 +213,10 @@ const styles = StyleSheet.create({
   },
   featureTitle: { ...Typography.headline, color: Colors.text },
   featureSub: { ...Typography.caption1, color: Colors.textSecondary, marginTop: 2 },
-  pricingSection: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl },
+  pricingSection: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl, flexWrap: 'wrap' },
   priceCard: {
     flex: 1,
+    minWidth: 140,
     backgroundColor: Colors.card,
     borderRadius: BorderRadius.lg,
     padding: Spacing.lg,
@@ -209,11 +240,5 @@ const styles = StyleSheet.create({
   priceLabel: { ...Typography.subhead, color: Colors.textSecondary, marginBottom: Spacing.sm },
   priceAmount: { ...Typography.title1, color: Colors.text },
   pricePer: { ...Typography.caption1, color: Colors.textSecondary },
-  priceSave: {
-    ...Typography.caption1,
-    fontWeight: '600',
-    color: Colors.sage,
-    marginTop: Spacing.sm,
-  },
   legalText: { ...Typography.footnote, color: Colors.textMuted, textAlign: 'center' },
 });

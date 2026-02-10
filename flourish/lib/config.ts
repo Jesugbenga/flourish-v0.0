@@ -28,12 +28,8 @@ export const REVENUECAT_API_KEY: string =
   process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ??
   '';
 
-/**
- * Mock mode: when true the app runs entirely off local mock data.
- * Turn this on for demos, offline dev, or before the backend is deployed.
- */
-export const MOCK_MODE: boolean =
-  (extra.mockMode ?? process.env.EXPO_PUBLIC_MOCK_MODE ?? 'true') === 'true';
+/** Mock mode removed — app runs in production mode. */
+export const MOCK_MODE = false;
 
-/** RevenueCat premium entitlement ID */
-export const PREMIUM_ENTITLEMENT = 'premium';
+/** RevenueCat premium entitlement ID — matches the entitlement created in RevenueCat dashboard */
+export const PREMIUM_ENTITLEMENT = 'Flourish Pro';

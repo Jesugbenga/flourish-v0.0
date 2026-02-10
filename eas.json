@@ -1,0 +1,28 @@
+{
+  "build": {
+    "production": {
+      "ios": {
+        "buildType": "app-store"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    },
+    "development": {
+      "ios": {
+        "buildType": "development"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "",
+        "ascAppId": ""
+      }
+    }
+  }
+}

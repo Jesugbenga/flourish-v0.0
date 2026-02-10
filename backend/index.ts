@@ -80,7 +80,6 @@ export const api = onRequest(
     region: 'us-central1',
     timeoutSeconds: 60,
     memory: '256MiB',
-    // Set secrets/env vars in Firebase Console or via firebase functions:secrets
   },
   app
 );

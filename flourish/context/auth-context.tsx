@@ -2,11 +2,9 @@
  * ════════════════════════════════════════════
  *  Flourish — Auth Context
  * ════════════════════════════════════════════
- *  Wraps Firebase Auth + RevenueCat and exposes
- *  auth state to the entire app.
- *
- *  In MOCK_MODE, auth is bypassed and the user
- *  is treated as signed-in with premium access.
+ *  Wraps Firebase Auth + RevenueCat SDK.
+ *  Premium status is determined entirely by
+ *  RevenueCat entitlements (no webhook needed).
  */
 
 import React, {
@@ -25,31 +23,23 @@ import {
 } from 'firebase/auth';
 import Purchases, { type CustomerInfo } from 'react-native-purchases';
 import { firebaseAuth } from '@/lib/firebase';
-import { MOCK_MODE, REVENUECAT_API_KEY, PREMIUM_ENTITLEMENT } from '@/lib/config';
+import { REVENUECAT_API_KEY, PREMIUM_ENTITLEMENT } from '@/lib/config';
 import { api } from '@/lib/api';
+import { useApp } from '@/context/app-context';
+import * as Updates from 'expo-updates';
 
 // ── Context Shape ───────────────────────────────────────────
 
 interface AuthState {
-  /** Whether the auth system has finished initialising */
   isReady: boolean;
-  /** Firebase says the user is signed in (or mock mode) */
   isSignedIn: boolean;
-  /** User has an active premium subscription */
   hasPremium: boolean;
-  /** Firebase UID (or 'mock-user') */
   userId: string | null;
-  /** Display name from Firebase */
   displayName: string | null;
-  /** Email from Firebase */
   email: string | null;
-  /** Whether onboarding is complete (set after init call) */
   onboardingComplete: boolean;
-  /** Sign out */
   signOut: () => Promise<void>;
-  /** Force-refresh premium status from RevenueCat */
   refreshPremium: () => Promise<void>;
-  /** Mark onboarding as done locally */
   setOnboardingComplete: (v: boolean) => void;
 }
 
@@ -58,41 +48,43 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 // ── Provider ────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isReady, setIsReady] = useState(MOCK_MODE);
-  const [hasPremium, setHasPremium] = useState(MOCK_MODE); // mock = premium
-  const [onboardingComplete, setOnboardingComplete] = useState(MOCK_MODE);
+  // Access app context methods to refresh profile and wins
+  let refreshProfile: (() => Promise<void>) | undefined;
+  let refreshWins: (() => Promise<void>) | undefined;
+  try {
+    // Only call inside a component render, not SSR
+    ({ refreshProfile, refreshWins } = useApp());
+  } catch {}
+  const [isReady, setIsReady] = useState(false);
+  const [hasPremium, setHasPremium] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [authResolved, setAuthResolved] = useState(MOCK_MODE);
+  const [authResolved, setAuthResolved] = useState(false);
   const purchasesConfiguredRef = useRef(false);
 
-  const isSignedIn = MOCK_MODE ? true : !!firebaseUser;
-  const userId = MOCK_MODE ? 'mock-user' : (firebaseUser?.uid ?? null);
-  const displayName = MOCK_MODE
-    ? 'Rebecca'
-    : (firebaseUser?.displayName ?? null);
-  const email = MOCK_MODE
-    ? 'rebecca@flourish.app'
-    : (firebaseUser?.email ?? null);
+  const isSignedIn = !!firebaseUser;
+  const userId = firebaseUser?.uid ?? null;
+  const displayName = firebaseUser?.displayName ?? null;
+  const email = firebaseUser?.email ?? null;
 
-  // ── Firebase auth state listener ──
+  // ── Firebase auth listener ──
   useEffect(() => {
-    if (MOCK_MODE) return;
-
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+    const unsub = onAuthStateChanged(firebaseAuth, (user) => {
       setFirebaseUser(user);
       setAuthResolved(true);
     });
-
-    return unsubscribe;
+    return unsub;
   }, []);
 
-  // ── RevenueCat setup ──
-  useEffect(() => {
-    if (MOCK_MODE) return;
-    if (!REVENUECAT_API_KEY) return;
-    if (!isSignedIn || !userId) return;
+  // ── Derive premium from RevenueCat CustomerInfo (no Firestore write) ──
+  const checkPremium = useCallback((info: CustomerInfo) => {
+    const active = info.entitlements.active[PREMIUM_ENTITLEMENT] !== undefined;
+    setHasPremium(active);
+  }, []);
 
-    // Only configure Purchases once
+  // ── RevenueCat setup + listener ──
+  useEffect(() => {
+    if (!REVENUECAT_API_KEY || !isSignedIn || !userId) return;
     if (purchasesConfiguredRef.current) return;
     purchasesConfiguredRef.current = true;
 
@@ -100,30 +92,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         Purchases.configure({ apiKey: REVENUECAT_API_KEY });
         await Purchases.logIn(userId);
-        const info: CustomerInfo = await Purchases.getCustomerInfo();
-        setHasPremium(
-          info.entitlements.active[PREMIUM_ENTITLEMENT] !== undefined,
-        );
+        const info = await Purchases.getCustomerInfo();
+        checkPremium(info);
       } catch {
-        // RevenueCat not configured — stay free
         setHasPremium(false);
       }
     };
-
     init();
-  }, [isSignedIn, userId]);
 
-  // ── Backend init call (creates user if needed) ──
+    // Real-time listener — fires on purchase, renewal, cancellation
+    const listener = (info: CustomerInfo) => checkPremium(info);
+    Purchases.addCustomerInfoUpdateListener(listener);
+    return () => { Purchases.removeCustomerInfoUpdateListener(listener); };
+  }, [isSignedIn, userId, checkPremium]);
+
+  // ── Backend init (creates Firestore user + fetches onboarding state) ──
   useEffect(() => {
-    if (MOCK_MODE) {
-      setIsReady(true);
-      return;
-    }
-
-    // Auth state not resolved yet — wait
     if (!authResolved) return;
-
-    // Not signed in → mark ready so InitGate can route to sign-in
     if (!isSignedIn || !email) {
       setIsReady(true);
       return;
@@ -132,40 +117,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initBackend = async () => {
       try {
         await api.initUser(email, displayName ?? undefined);
-
-        // Fetch profile to know onboarding state
         const profile = await api.getProfile();
         setOnboardingComplete(profile.profile.onboardingComplete);
-        setHasPremium(profile.subscription.active);
+        // Full app reload to ensure all data is fresh
+        if (Updates.reloadAsync) {
+          await Updates.reloadAsync();
+        }
       } catch (err) {
         console.error('[AuthContext] Backend init failed:', err);
-        // Offline or backend not deployed — carry on
       } finally {
         setIsReady(true);
       }
     };
-
     initBackend();
-  }, [authResolved, isSignedIn, email]);
+  }, [authResolved, isSignedIn, email, displayName, refreshProfile, refreshWins]);
 
   // ── Actions ──
   const signOut = useCallback(async () => {
-    if (!MOCK_MODE) {
-      await firebaseSignOut(firebaseAuth);
-    }
+    await firebaseSignOut(firebaseAuth);
   }, []);
 
   const refreshPremium = useCallback(async () => {
-    if (MOCK_MODE) return;
     try {
       const info = await Purchases.getCustomerInfo();
-      setHasPremium(
-        info.entitlements.active[PREMIUM_ENTITLEMENT] !== undefined,
-      );
-    } catch {
-      // ignore
-    }
-  }, []);
+      checkPremium(info);
+    } catch { /* ignore */ }
+  }, [checkPremium]);
 
   return (
     <AuthContext.Provider
@@ -188,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 // ── Hook ────────────────────────────────────────────────────
+
 
 export function useAuthContext() {
   const ctx = useContext(AuthContext);

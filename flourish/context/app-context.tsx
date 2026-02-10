@@ -15,7 +15,6 @@ import {
   challengeDays as defaultChallenge,
   budgetCategories as defaultBudget,
 } from '@/data/mock-data';
-import { MOCK_MODE } from '@/lib/config';
 import { api, type WinPayload, type WinRow, type WinsSummary } from '@/lib/api';
 
 // ─── Context Shape ─────────────────────────────────────────────────────
@@ -81,8 +80,11 @@ function profileFromSummary(summary: WinsSummary, existing: UserProfile): UserPr
 // ─── Provider ──────────────────────────────────────────────────────────
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserProfile>(defaultProfile);
-  const [wins, setWins] = useState<SavingsWin[]>(defaultWins);
+  const initialUser: UserProfile = defaultProfile;
+  const initialWins: SavingsWin[] = defaultWins;
+
+  const [user, setUser] = useState<UserProfile>(initialUser);
+  const [wins, setWins] = useState<SavingsWin[]>(initialWins);
   const [challengeState, setChallengeState] = useState<ChallengeDay[]>(defaultChallenge);
   const [budget, setBudget] = useState<BudgetCategory[]>(defaultBudget);
   const [monthlyBudget, setMonthlyBudgetState] = useState<number>(2000);
@@ -92,8 +94,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Backend data fetchers ──
 
   const refreshProfile = useCallback(async () => {
-    // If running in mock mode, still allow refresh when a real user is signed in
-    if (MOCK_MODE && !firebaseAuth.currentUser) return;
     try {
       const profile = await api.getProfile();
       setUser((prev) => ({
@@ -115,8 +115,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshWins = useCallback(async () => {
-    // If running in mock mode, still allow refresh when a real user is signed in
-    if (MOCK_MODE && !firebaseAuth.currentUser) return;
     try {
       setLoading(true);
       const [winsData, summary] = await Promise.all([
@@ -134,8 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Initial fetch when not in mock mode ──
   useEffect(() => {
-    // Run initial fetch if not in mock mode, or if a user is already signed in.
-    if (MOCK_MODE && !firebaseAuth.currentUser) return;
+    if (!firebaseAuth.currentUser) return;
     const init = async () => {
       setLoading(true);
       await Promise.all([refreshProfile(), refreshWins()]);
@@ -144,7 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     init();
   }, [refreshProfile, refreshWins]);
 
-  // If the user is signed in (even when MOCK_MODE=true), prefer their Firebase
+  // If the user is signed in, prefer their Firebase
   // displayName over the mock name so greetings show correctly.
   useEffect(() => {
     const unsub = onAuthStateChanged(firebaseAuth, (u) => {
@@ -170,17 +167,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
       });
 
-      // Backend sync (fire & forget)
-      if (!MOCK_MODE) {
-        const payload: WinPayload = {
-          title: win.description,
-          amountSaved: win.amount,
-          category: win.type,
-        };
-        api.logWin(payload).catch(() => {
-          // Could revert optimistic update here in the future
-        });
-      }
+      // Backend sync — attempt to persist and then refresh wins to ensure
+      // totals are correct in the UI. This keeps optimistic updates snappy
+      // but ensures eventual consistency with the backend.
+      const payload: WinPayload = {
+        title: win.description,
+        amountSaved: win.amount,
+        category: win.type,
+      };
+      (async () => {
+        try {
+          await api.logWin(payload);
+          // Refresh wins/totals after the log succeeds
+          await refreshWins();
+        } catch {
+          // ignore; optimistic UI remains
+        }
+      })();
     },
     [],
   );
@@ -242,16 +245,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         },
       ];
       // Persist to backend (profiles doc)
-      if (!MOCK_MODE) {
-        // Fire-and-forget; don't block UI
-        (async () => {
-          try {
-            await api.updateProfile({ budgetCategories: next });
-          } catch (e) {
-            // ignore for now; could show a toast later
-          }
-        })();
-      }
+      (async () => {
+        try {
+          await api.updateProfile({ budgetCategories: next });
+        } catch {
+          // ignore for now; could show a toast later
+        }
+      })();
       return next;
     });
   }, []);
@@ -259,13 +259,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteCategory = useCallback((categoryId: string) => {
     setBudget((prev) => {
       const next = prev.filter((c) => c.id !== categoryId);
-      if (!MOCK_MODE) {
-        (async () => {
-          try {
-            await api.updateProfile({ budgetCategories: next });
-          } catch {}
-        })();
-      }
+      (async () => {
+        try {
+          await api.updateProfile({ budgetCategories: next });
+        } catch {}
+      })();
       return next;
     });
   }, []);

@@ -9,7 +9,8 @@
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "lint": "eslint api/ lib/ middleware/",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test:webhook": "node scripts/send_revenuecat_test.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

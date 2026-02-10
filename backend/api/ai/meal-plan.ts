@@ -11,7 +11,6 @@
 
 import type { Request, Response } from 'express';
 import { requireAuth } from '../../middleware/require-auth';
-import { requirePremium } from '../../middleware/require-premium';
 import { db } from '../../lib/firebase';
 import { generateAiResponse, logAiUsage } from '../../lib/gemini';
 import { sendSuccess, sendError, assertMethod, Errors } from '../../lib/errors';
@@ -106,7 +105,6 @@ export default async function handler(req: Request, res: Response) {
 
   const user = await requireAuth(req, res);
   if (!user) return;
-  if (!requirePremium(user, res)) return;
 
   try {
     const body = req.body as MealPlanPayload;

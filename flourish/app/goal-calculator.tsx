@@ -18,7 +18,6 @@ import { Card } from '@/components/ui/card';
 import { useAuthContext } from '@/context/auth-context';
 import { canAccess } from '@/lib/feature-gate';
 import { api, type GoalResponse } from '@/lib/api';
-import { MOCK_MODE } from '@/lib/config';
 
 const presetGoals = [
   { label: 'Emergency Fund', icon: 'shield-checkmark' as const, amount: 1000 },
@@ -56,7 +55,7 @@ export default function GoalCalculatorScreen() {
     setCalculated(true);
 
     // Try AI-powered goal plan for premium users
-    if (!MOCK_MODE && !gated && target > 0) {
+    if (!gated && target > 0) {
       setAiLoading(true);
       try {
         const result = await api.goalCalculator({

@@ -22,7 +22,6 @@ import { FlourishButton } from '@/components/ui/flourish-button';
 import { useAuthContext } from '@/context/auth-context';
 import { useApp } from '@/context/app-context';
 import { api, type ProfileData } from '@/lib/api';
-import { MOCK_MODE } from '@/lib/config';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -40,7 +39,6 @@ export default function ProfileScreen() {
 
   // Fetch full profile on mount
   useEffect(() => {
-    if (MOCK_MODE) return;
     api.getProfile().then((p) => {
       setProfile(p);
       setDisplayName(p.profile.displayName ?? '');
@@ -52,8 +50,7 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (!MOCK_MODE) {
-        const updated = await api.updateProfile({
+      const updated = await api.updateProfile({
           displayName: displayName || undefined,
           numKids: numKids ? parseInt(numKids, 10) : undefined,
           monthlyBudget: monthlyBudget ? parseFloat(monthlyBudget) : undefined,
@@ -65,7 +62,6 @@ export default function ProfileScreen() {
         // Refresh global profile state
         await refreshProfile();
         setEditing(false);
-      }
       Alert.alert('Saved', 'Your profile has been updated.');
     } catch {
       Alert.alert('Error', 'Could not save profile. Please try again.');
