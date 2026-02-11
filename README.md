@@ -83,12 +83,13 @@ cd flourish
 npm install
 ```
 
+
 ### 5. Run Locally
 
 ```bash
-# Backend (Vercel dev server)
+# Backend (Firebase emulator)
 cd backend
-npx vercel dev
+npm run serve
 
 # Frontend (Expo)
 cd flourish
@@ -119,16 +120,14 @@ aiCache/{cacheId}            — user_id, endpoint, prompt_hash, response, expir
 
 ---
 
-## Deploying to Vercel
 
-1. Push your code to GitHub
-2. Import the `backend/` folder in [Vercel](https://vercel.com)
-3. Add environment variables in the Vercel dashboard:
-   - `FIREBASE_SERVICE_ACCOUNT_KEY` (the full JSON string)
-   - `GEMINI_API_KEY`
-   - `REVENUECAT_API_KEY`
-   - `REVENUECAT_WEBHOOK_SECRET`
-4. Deploy!
+## Deploying Backend
+
+To deploy backend functions to Firebase:
+
+```bash
+firebase deploy --only functions
+```
 
 ---
 
@@ -136,7 +135,7 @@ aiCache/{cacheId}            — user_id, endpoint, prompt_hash, response, expir
 
 1. Create an app in [RevenueCat](https://app.revenuecat.com)
 2. Set the **App User ID** to the Firebase UID (this is done automatically by the frontend)
-3. Add a webhook pointing to `https://your-vercel-url.vercel.app/api/webhooks/revenuecat`
+3. Add a webhook pointing to your Firebase Cloud Function endpoint, e.g. `https://us-central1-<project-id>.cloudfunctions.net/api/webhooks/revenuecat`
 4. Copy the webhook secret into `REVENUECAT_WEBHOOK_SECRET`
 5. **Android paywall:** RevenueCat uses different public API keys per platform. In the RevenueCat dashboard go to **Project → API Keys** and copy the **Google (Android) Public API Key**. In `flourish/.env` set `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` to that value. Without it, the paywall will show "Loading plans…" forever on Android. Use `EXPO_PUBLIC_REVENUECAT_API_KEY` for iOS (Apple public key).
 

@@ -122,11 +122,9 @@ backend/
 
 ### How It Works
 
-1. User purchases via **RevenueCat** in the mobile app
-2. RevenueCat sends a **webhook** to `POST /api/webhooks/revenuecat`
-3. Backend verifies the webhook signature (HMAC-SHA256)
-4. Updates `has_premium` and `premium_plan` in the Firestore `users` document
-5. Frontend checks premium status via `GET /api/user/profile`
+1. Backend verifies the webhook signature (HMAC-SHA256)
+2. Updates `has_premium` and `premium_plan` in the Firestore `users` document
+3. Frontend checks premium status via `GET /api/user/profile`
 
 ### Enabling Webhooks
 
@@ -168,8 +166,6 @@ backend/
 2. **User context injection** — the user's profile (kids, budget, savings, dietary prefs) is included in every prompt
 3. **Response caching** — results are cached in the Firestore `aiCache` collection with configurable TTLs
 4. **Graceful fallbacks** — if the Gemini API key is missing or the call fails, realistic mock responses are returned
-
-### Cache TTLs
 
 | Endpoint | TTL |
 |----------|-----|

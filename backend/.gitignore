@@ -4,4 +4,4 @@
 node_modules/
 dist/
 .vercel/
-.vercel
+.expo/

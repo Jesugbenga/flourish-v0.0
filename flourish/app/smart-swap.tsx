@@ -20,8 +20,7 @@ import { smartSwapWithGemini, type SmartSwapResponse } from '@/lib/gemini-client
 import { smartSwaps } from '@/data/mock-data';
 
 export default function SmartSwapScreen() {
-  const { addWin } = useApp();
-  const { wins } = useApp();
+  const { addWin, wins } = useApp();
   const { hasPremium } = useAuthContext();
   const router = useRouter();
 
@@ -51,8 +50,8 @@ export default function SmartSwapScreen() {
       const result = await smartSwapWithGemini('demo-user', { item: search.trim() });
       setAiResult(result);
     } catch (err) {
-      console.error('Smart swap error:', err);
-      // Fall back to local results
+      // Handle error gracefully
+      console.error('AI search failed:', err);
     } finally {
       setAiLoading(false);
     }
@@ -70,7 +69,7 @@ export default function SmartSwapScreen() {
         originalItem: orig,
         originalPrice: 0,
         alternative: s.name || 'Alternative',
-        alternativePrice: Math.max(0, (0 + (savingsWeekly ? 0 : 0))),
+        alternativePrice: +(savingsWeekly * 17).toFixed(2),
         savingsWeekly,
         savingsYearly,
         confidence: 75,
@@ -181,6 +180,7 @@ export default function SmartSwapScreen() {
                   variant={isSwapSaved(swap.id, swap.alternative) ? 'secondary' : 'primary'}
                   fullWidth
                   disabled={isSwapSaved(swap.id, swap.alternative)}
+                  icon={isSwapSaved(swap.id, swap.alternative) ? 'checkmark-circle' : 'add-circle'}
                 />
               </View>
             </Animated.View>

@@ -384,16 +384,15 @@ export async function smartSwapWithGemini(userId: string, payload: SmartSwapPayl
 
   const SWAP_PROMPT = `You are a friendly UK budget shopping assistant. The user buys: "${payload.item}".${payload.budget ? ` Their weekly budget is £${payload.budget}.` : ''}
 Suggest 3 cheaper alternatives from UK stores (Aldi, Lidl, Tesco, Asda, etc.).
-Respond ONLY with valid JSON (no markdown, no other text):
+For each alternative, provide the estimated price per week (not just the savings), and a short reason. Respond ONLY with valid JSON (no markdown, no other text):
 {
   "original": "the item they mentioned",
   "swaps": [
-    { "name": "Alternative name", "estimatedSaving": "£X.XX/week", "reason": "Short reason", "emoji": "emoji" },
-    { "name": "Alternative name 2", "estimatedSaving": "£X.XX/week", "reason": "Short reason", "emoji": "emoji" },
-    { "name": "Alternative name 3", "estimatedSaving": "£X.XX/week", "reason": "Short reason", "emoji": "emoji" }
+    { "name": "Alternative name", "alternativePrice": "£X.XX/week", "estimatedSaving": "£X.XX/week", "reason": "Short reason moms will understand", "emoji": "emoji" },
+    { "name": "Alternative name 2", "alternativePrice": "£X.XX/week", "estimatedSaving": "£X.XX/week", "reason": "Short reason moms will understand", "emoji": "emoji" },
+    { "name": "Alternative name 3", "alternativePrice": "£X.XX/week", "estimatedSaving": "£X.XX/week", "reason": "Short reason moms will understand", "emoji": "emoji" }
   ],
-  "totalEstimatedSaving": "£X.XX/month",
-  "tip": "A practical tip"
+  "tip": "A practical tip for saving money on this item, written for busy moms."
 }`;
 
   // Retry logic for transient server errors and recovery for truncated responses
@@ -407,7 +406,7 @@ Respond ONLY with valid JSON (no markdown, no other text):
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: SWAP_PROMPT }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1500 },
         }),
       });
 
@@ -520,7 +519,7 @@ Respond ONLY with valid JSON (no markdown, no other text). EXACTLY this structur
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: MEAL_PROMPT }] }],
-        generationConfig: { temperature: 0.8, maxOutputTokens: 2000 },
+        generationConfig: { temperature: 0.8, maxOutputTokens: 1500 },
       }),
     });
 
