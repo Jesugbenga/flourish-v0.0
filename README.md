@@ -138,6 +138,7 @@ aiCache/{cacheId}            — user_id, endpoint, prompt_hash, response, expir
 2. Set the **App User ID** to the Firebase UID (this is done automatically by the frontend)
 3. Add a webhook pointing to `https://your-vercel-url.vercel.app/api/webhooks/revenuecat`
 4. Copy the webhook secret into `REVENUECAT_WEBHOOK_SECRET`
+5. **Android paywall:** RevenueCat uses different public API keys per platform. In the RevenueCat dashboard go to **Project → API Keys** and copy the **Google (Android) Public API Key**. In `flourish/.env` set `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` to that value. Without it, the paywall will show "Loading plans…" forever on Android. Use `EXPO_PUBLIC_REVENUECAT_API_KEY` for iOS (Apple public key).
 
 ---
 

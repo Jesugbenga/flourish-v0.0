@@ -1,5 +1,5 @@
 import { ThemeProvider, DefaultTheme } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
@@ -7,7 +7,6 @@ import 'react-native-reanimated';
 import { AppProvider } from '@/context/app-context';
 import { AuthProvider, useAuthContext } from '@/context/auth-context';
 import { Colors } from '@/constants/theme';
-import { useEffect } from 'react';
 
 const FlourishTheme = {
   ...DefaultTheme,
@@ -30,26 +29,14 @@ export const unstable_settings = {
  *   - Not signed in  →  /auth/sign-in
  *   - Onboarding needed  →  /onboarding
  *   - Ready  →  /
+ * Uses <Redirect /> so the router handles navigation (avoids "REPLACE was not handled" error).
  */
 function InitGate({ children }: { children: React.ReactNode }) {
   const { isReady, isSignedIn, onboardingComplete } = useAuthContext();
   const segments = useSegments();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!isReady) return;
-
-    const inAuthGroup = segments[0] === 'auth';
-    const inOnboarding = segments[0] === 'onboarding';
-
-    if (!isSignedIn && !inAuthGroup) {
-      router.replace('/auth/sign-in' as any);
-    } else if (isSignedIn && !onboardingComplete && !inOnboarding) {
-      router.replace('/onboarding' as any);
-    } else if (isSignedIn && onboardingComplete && (inAuthGroup || inOnboarding)) {
-      router.replace('/' as any);
-    }
-  }, [isReady, isSignedIn, onboardingComplete, segments]);
+  const inAuthGroup = segments[0] === 'auth';
+  const inOnboarding = segments[0] === 'onboarding';
 
   if (!isReady) {
     return (
@@ -57,6 +44,16 @@ function InitGate({ children }: { children: React.ReactNode }) {
         <ActivityIndicator size="large" color={Colors.sage} />
       </View>
     );
+  }
+
+  if (!isSignedIn && !inAuthGroup) {
+    return <Redirect href="/auth/sign-in" />;
+  }
+  if (isSignedIn && !onboardingComplete && !inOnboarding) {
+    return <Redirect href="/onboarding" />;
+  }
+  if (isSignedIn && onboardingComplete && (inAuthGroup || inOnboarding)) {
+    return <Redirect href="/" />;
   }
 
   return <>{children}</>;

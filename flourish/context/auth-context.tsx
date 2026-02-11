@@ -21,9 +21,10 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
+import { Platform } from 'react-native';
 import Purchases, { type CustomerInfo } from 'react-native-purchases';
 import { firebaseAuth } from '@/lib/firebase';
-import { REVENUECAT_API_KEY, PREMIUM_ENTITLEMENT } from '@/lib/config';
+import { REVENUECAT_API_KEY, REVENUECAT_ANDROID_API_KEY, PREMIUM_ENTITLEMENT } from '@/lib/config';
 import { api } from '@/lib/api';
 import { useApp } from '@/context/app-context';
 import * as Updates from 'expo-updates';
@@ -38,12 +39,17 @@ interface AuthState {
   displayName: string | null;
   email: string | null;
   onboardingComplete: boolean;
+  /** True after Purchases.configure() has run so paywall can call getOfferings() */
+  isPurchasesConfigured: boolean;
   signOut: () => Promise<void>;
   refreshPremium: () => Promise<void>;
   setOnboardingComplete: (v: boolean) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
+
+/** Guard so we only configure RevenueCat once per app process (avoids duplicate call in React Strict Mode) */
+let revenueCatConfiguredOnce = false;
 
 // ── Provider ────────────────────────────────────────────────
 
@@ -60,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
+  const [isPurchasesConfigured, setIsPurchasesConfigured] = useState(false);
   const purchasesConfiguredRef = useRef(false);
 
   const isSignedIn = !!firebaseUser;
@@ -82,15 +89,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setHasPremium(active);
   }, []);
 
-  // ── RevenueCat setup + listener ──
+  // ── RevenueCat: configure on app load so paywall can call getOfferings() ──
   useEffect(() => {
-    if (!REVENUECAT_API_KEY || !isSignedIn || !userId) return;
-    if (purchasesConfiguredRef.current) return;
+    const apiKey =
+      Platform.OS === 'android'
+        ? (REVENUECAT_ANDROID_API_KEY?.trim() || REVENUECAT_API_KEY?.trim())
+        : REVENUECAT_API_KEY?.trim();
+    if (!apiKey || purchasesConfiguredRef.current) {
+      if (!apiKey) setIsPurchasesConfigured(false);
+      return;
+    }
     purchasesConfiguredRef.current = true;
+    Purchases.configure({ apiKey });
+    setIsPurchasesConfigured(true);
+  }, []);
+
+  // ── RevenueCat: log in and sync premium when user signs in ──
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
 
     const init = async () => {
       try {
-        Purchases.configure({ apiKey: REVENUECAT_API_KEY });
         await Purchases.logIn(userId);
         const info = await Purchases.getCustomerInfo();
         checkPremium(info);
@@ -100,7 +119,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     init();
 
-    // Real-time listener — fires on purchase, renewal, cancellation
     const listener = (info: CustomerInfo) => checkPremium(info);
     Purchases.addCustomerInfoUpdateListener(listener);
     return () => { Purchases.removeCustomerInfoUpdateListener(listener); };
@@ -114,15 +132,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Keep showing loading until we have real onboarding status from backend;
+    // otherwise InitGate would briefly send returning users to onboarding.
+    setIsReady(false);
+
     const initBackend = async () => {
       try {
         await api.initUser(email, displayName ?? undefined);
         const profile = await api.getProfile();
         setOnboardingComplete(profile.profile.onboardingComplete);
-        // Full app reload to ensure all data is fresh
-        if (Updates.reloadAsync) {
-          await Updates.reloadAsync();
-        }
       } catch (err) {
         console.error('[AuthContext] Backend init failed:', err);
       } finally {
@@ -154,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         displayName,
         email,
         onboardingComplete,
+        isPurchasesConfigured,
         signOut,
         refreshPremium,
         setOnboardingComplete,

@@ -210,55 +210,13 @@ export const recentWins: SavingsWin[] = [];
 // ─── 7-Day Challenge ───────────────────────────────────────────────────
 
 export const challengeDays: ChallengeDay[] = [
-  {
-    day: 1,
-    title: 'Audit your fridge',
-    description: 'Take stock of what you have before shopping. Plan meals around it.',
-    completed: true,
-    savingsEstimate: '£5',
-  },
-  {
-    day: 2,
-    title: 'Swap one item',
-    description: 'Replace one branded product with a store-brand alternative.',
-    completed: true,
-    savingsEstimate: '£2',
-  },
-  {
-    day: 3,
-    title: 'No-spend evening',
-    description: 'Plan a free family evening instead of ordering takeaway.',
-    completed: true,
-    savingsEstimate: '£12',
-  },
-  {
-    day: 4,
-    title: 'Meal prep one lunch',
-    description: "Make tomorrow's lunch tonight instead of buying.",
-    completed: false,
-    savingsEstimate: '£6',
-  },
-  {
-    day: 5,
-    title: 'Energy check',
-    description: 'Turn off standby devices and check your thermostat.',
-    completed: false,
-    savingsEstimate: '£3',
-  },
-  {
-    day: 6,
-    title: 'Subscription audit',
-    description: 'Review one subscription — do you still need it?',
-    completed: false,
-    savingsEstimate: '£10',
-  },
-  {
-    day: 7,
-    title: 'Share your win',
-    description: 'Tell someone about a saving you made this week.',
-    completed: false,
-    savingsEstimate: '£0',
-  },
+  { day: 1, title: 'Audit your fridge', description: 'Take stock of what you have before shopping. Plan meals around it.', completed: false, savingsEstimate: '£5' },
+  { day: 2, title: 'Swap one item', description: 'Replace one branded product with a store-brand alternative.', completed: false, savingsEstimate: '£2' },
+  { day: 3, title: 'No-spend evening', description: 'Plan a free family evening instead of ordering takeaway.', completed: false, savingsEstimate: '£12' },
+  { day: 4, title: 'Meal prep one lunch', description: "Make tomorrow's lunch tonight instead of buying.", completed: false, savingsEstimate: '£6' },
+  { day: 5, title: 'Energy check', description: 'Turn off standby devices and check your thermostat.', completed: false, savingsEstimate: '£3' },
+  { day: 6, title: 'Subscription audit', description: 'Review one subscription — do you still need it?', completed: false, savingsEstimate: '£10' },
+  { day: 7, title: 'Share your win', description: 'Tell someone about a saving you made this week.', completed: false, savingsEstimate: '£0' },
 ];
 
 // ─── Lessons ───────────────────────────────────────────────────────────

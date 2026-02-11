@@ -6,6 +6,7 @@ import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/
 import { Card } from '@/components/ui/card';
 import { SectionHeader } from '@/components/ui/section-header';
 import { useApp } from '@/context/app-context';
+import { useAuthContext } from '@/context/auth-context';
 import { dailyTips, quickActions } from '@/data/mock-data';
 
 const { width } = Dimensions.get('window');
@@ -19,7 +20,11 @@ function getGreeting(): string {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useApp();
+  const { user, challengeDays } = useApp();
+  const { displayName: authDisplayName } = useAuthContext();
+  const displayName = (user.name && user.name.trim()) ? user.name : (authDisplayName ?? '');
+  const completedDays = challengeDays.filter((d) => d.completed).length;
+  const challengeBadgeLabel = completedDays === 0 ? 'Day 1' : `Day ${completedDays + 1}`;
   const todayTip = dailyTips[Math.floor(Date.now() / 86400000) % dailyTips.length];
 
   return (
@@ -34,7 +39,7 @@ export default function HomeScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.greetingText}>{getGreeting()},</Text>
               <View style={styles.nameRow}>
-                <Text style={styles.nameText}>{user.name}</Text>
+                <Text style={styles.nameText}>{displayName || 'Saver'}</Text>
                 <Ionicons name="leaf" size={20} color={Colors.sage} style={{ marginLeft: Spacing.sm }} />
               </View>
               <Text style={styles.subGreeting}>
@@ -124,7 +129,7 @@ export default function HomeScreen() {
               <Text style={styles.challengeSub}>Small daily tasks, real savings.</Text>
             </View>
             <View style={styles.challengeBadge}>
-              <Text style={styles.challengeBadgeText}>Day 4</Text>
+              <Text style={styles.challengeBadgeText}>{challengeBadgeLabel}</Text>
             </View>
           </View>
         </Card>

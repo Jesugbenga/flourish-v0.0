@@ -23,24 +23,54 @@ const features = [
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const { refreshPremium } = useAuthContext();
+  const { refreshPremium, isPurchasesConfigured } = useAuthContext();
   const [offerings, setOfferings] = useState<PurchasesOfferings | null>(null);
   const [purchasing, setPurchasing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // ── Fetch RevenueCat offerings on mount ──
-  useEffect(() => {
-    const fetchOfferings = async () => {
-      try {
-        const result = await Purchases.getOfferings();
-        if (result.current && result.current.availablePackages.length > 0) {
-          setOfferings(result);
-        }
-      } catch (err) {
-        console.error('[Paywall] Failed to fetch offerings:', err);
+  // ── Fetch RevenueCat offerings ──
+  const fetchOfferings = async () => {
+    setLoadError(null);
+    setLoading(true);
+    try {
+      const result = await Purchases.getOfferings();
+      if (result.current && result.current.availablePackages.length > 0) {
+        setOfferings(result);
+      } else {
+        const reason = !result.current
+          ? 'Set a "Current" offering in RevenueCat: Dashboard → Offerings.'
+          : 'Current offering has no packages. In RevenueCat add products (Google Play / App Store) to your offering.';
+        console.warn('[Paywall] Offerings empty:', reason);
+        setLoadError(reason);
       }
-    };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[Paywall] Failed to fetch offerings:', err);
+      setLoadError(message || 'Could not load plans. Check Android API key and RevenueCat setup.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Only fetch offerings after RevenueCat SDK is configured (avoids "no singleton instance" error)
+  useEffect(() => {
+    if (!isPurchasesConfigured) {
+      setLoading(true);
+      return;
+    }
     fetchOfferings();
-  }, []);
+  }, [isPurchasesConfigured]);
+
+  // If SDK never configures (e.g. no API key), show error after a short delay
+  useEffect(() => {
+    if (isPurchasesConfigured) return;
+    const t = setTimeout(() => {
+      setLoadError('RevenueCat is not configured. Add EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY (Android) or EXPO_PUBLIC_REVENUECAT_API_KEY (iOS) to your .env.');
+      setLoading(false);
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [isPurchasesConfigured]);
 
   // ── Handle purchase ──
   const handlePurchase = async (pkg: PurchasesPackage) => {
@@ -137,10 +167,18 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        {!offerings && (
+        {loading && !offerings && !loadError && (
           <Text style={[styles.legalText, { marginBottom: Spacing.md }]}>
             Loading plans…
           </Text>
+        )}
+        {loadError && (
+          <View style={[styles.errorBox, { marginBottom: Spacing.md }]}>
+            <Text style={styles.errorText}>{loadError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={fetchOfferings}>
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         <FlourishButton
@@ -241,4 +279,20 @@ const styles = StyleSheet.create({
   priceAmount: { ...Typography.title1, color: Colors.text },
   pricePer: { ...Typography.caption1, color: Colors.textSecondary },
   legalText: { ...Typography.footnote, color: Colors.textMuted, textAlign: 'center' },
+  errorBox: {
+    backgroundColor: Colors.card,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  errorText: { ...Typography.footnote, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.sm },
+  retryBtn: {
+    alignSelf: 'center',
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.sageLight,
+    borderRadius: BorderRadius.md,
+  },
+  retryBtnText: { ...Typography.subhead, fontWeight: '600', color: Colors.sageDark },
 });

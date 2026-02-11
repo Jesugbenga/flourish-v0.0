@@ -22,10 +22,16 @@ export const FIREBASE_GOOGLE_IOS_CLIENT_ID: string =
 export const FIREBASE_GOOGLE_ANDROID_CLIENT_ID: string =
   process.env.EXPO_PUBLIC_FIREBASE_GOOGLE_ANDROID_CLIENT_ID ?? '';
 
-/** RevenueCat public API key (Apple / Google) */
+/** RevenueCat public API key for iOS — use for Apple App Store */
 export const REVENUECAT_API_KEY: string =
   extra.revenuecatApiKey ??
   process.env.EXPO_PUBLIC_REVENUECAT_API_KEY ??
+  '';
+
+/** RevenueCat public API key for Android — required for Google Play; use this on Android or getOfferings() returns empty */
+export const REVENUECAT_ANDROID_API_KEY: string =
+  extra.revenuecatAndroidApiKey ??
+  process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ??
   '';
 
 /** Mock mode removed — app runs in production mode. */

@@ -87,9 +87,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [wins, setWins] = useState<SavingsWin[]>(initialWins);
   const [challengeState, setChallengeState] = useState<ChallengeDay[]>(defaultChallenge);
   const [budget, setBudget] = useState<BudgetCategory[]>(defaultBudget);
-  const [monthlyBudget, setMonthlyBudgetState] = useState<number>(2000);
+  /** Monthly budget: 0 until loaded from backend, then profile.profile.monthlyBudget ?? 0 */
+  const [monthlyBudget, setMonthlyBudgetState] = useState<number>(0);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  /** Current Firebase user id; used to reset state on sign-out and refetch on user change */
+  const [authUserId, setAuthUserId] = useState<string | null>(() => firebaseAuth.currentUser?.uid ?? null);
+
+  // ── Sync with auth: reset on sign-out, track uid for refetch on user change ──
+  useEffect(() => {
+    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
+      if (u) {
+        setAuthUserId(u.uid);
+      } else {
+        setAuthUserId(null);
+        setUser(initialUser);
+        setWins(initialWins);
+        setChallengeState(defaultChallenge);
+        setBudget(defaultBudget);
+        setMonthlyBudgetState(0);
+        setLikedPosts(new Set());
+      }
+    });
+    return unsub;
+  }, []);
 
   // ── Backend data fetchers ──
 
@@ -102,10 +123,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         totalSavings: profile.user.totalSavings,
         streak: profile.user.streakDays,
       }));
-      // Update budget state if provided by backend
-      if ((profile.profile as any).monthlyBudget !== undefined) {
-        setMonthlyBudgetState(profile.profile.monthlyBudget ?? monthlyBudget);
-      }
+      // Use backend as source of truth for monthly budget (null from backend → 0)
+      setMonthlyBudgetState(profile.profile.monthlyBudget ?? 0);
       if ((profile.profile as any).budgetCategories !== undefined && Array.isArray(profile.profile.budgetCategories)) {
         setBudget(profile.profile.budgetCategories as BudgetCategory[]);
       }
@@ -130,27 +149,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Initial fetch when not in mock mode ──
+  // ── Fetch profile + wins when a user is signed in (or when the signed-in user changes) ──
   useEffect(() => {
-    if (!firebaseAuth.currentUser) return;
+    if (!authUserId) return;
     const init = async () => {
       setLoading(true);
       await Promise.all([refreshProfile(), refreshWins()]);
       setLoading(false);
     };
     init();
-  }, [refreshProfile, refreshWins]);
-
-  // If the user is signed in, prefer their Firebase
-  // displayName over the mock name so greetings show correctly.
-  useEffect(() => {
-    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
-      if (u?.displayName) {
-        setUser((prev) => ({ ...prev, name: u.displayName ?? prev.name }));
-      }
-    });
-    return unsub;
-  }, []);
+  }, [authUserId, refreshProfile, refreshWins]);
 
   // ── Actions ──
 
@@ -206,16 +214,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           date: new Date().toISOString().split('T')[0],
         };
 
-        // Use existing addWin (optimistic + backend sync)
+        // addWin does optimistic update + refreshWins after api.logWin; don't call refreshWins here
+        // or it can overwrite the new total with a stale summary before the backend has the win
         addWin(win);
-
-        // Refresh wins to sync challenge completion to wins page
-        refreshWins();
 
         return next;
       });
     },
-    [addWin, refreshWins],
+    [addWin],
   );
 
   const toggleLike = useCallback((postId: string) => {
