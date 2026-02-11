@@ -1,4 +1,5 @@
-import { ScrollView, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -41,6 +42,15 @@ const planItems = [
     color: '#B07EAA',
     route: '/goal-calculator',
     savings: 'Plan your future',
+  },
+  {
+    id: 'todo',
+    title: 'To‑Do List',
+    subtitle: 'Track tasks for your plan',
+    icon: 'clipboard' as const,
+    color: '#6C9BD1',
+    route: '/todo',
+    savings: 'Stay on track',
   },
 ];
 
@@ -150,4 +160,37 @@ const styles = StyleSheet.create({
   premiumContent: { flexDirection: 'row', alignItems: 'center' },
   premiumTitle: { ...Typography.headline, color: Colors.text },
   premiumSub: { ...Typography.caption1, color: Colors.textSecondary, marginTop: 2 },
+  todoInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  todoInput: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    color: Colors.text,
+  },
+  addButton: {
+    marginLeft: Spacing.sm,
+    backgroundColor: Colors.sage,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.card,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+  },
+  todoLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  todoText: { marginLeft: Spacing.md, color: Colors.text },
+  todoTextDone: { textDecorationLine: 'line-through', color: Colors.textSecondary },
 });

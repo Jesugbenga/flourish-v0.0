@@ -18,6 +18,7 @@ import {
   setDoc,
   addDoc,
 } from 'firebase/firestore';
+import { updateDoc, deleteDoc } from 'firebase/firestore';
 import { chatWithGemini, GeminiChatPayload } from './gemini-client';
 
 // ── Types mirroring backend payloads / responses ────────────
@@ -410,6 +411,47 @@ export const api = {
 
     // Reuse getProfile to read back current state
     return api.getProfile() as Promise<ProfileData>;
+  },
+
+  // ── Todos (per-user subcollection) ──
+  getTodos: async () => {
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new ApiError('Not authenticated', 401);
+    const uid = user.uid;
+    const todosCol = collection(db, 'users', uid, 'todos');
+    const snap = await getDocs(todosCol);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  },
+
+  addTodo: async (text: string) => {
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new ApiError('Not authenticated', 401);
+    const uid = user.uid;
+    const todosCol = collection(db, 'users', uid, 'todos');
+    const now = new Date().toISOString();
+    const docRef = await addDoc(todosCol, { text, completed: false, created_at: now, updated_at: now });
+    const snap = await getDoc(docRef);
+    return { id: docRef.id, ...(snap.data() as any) };
+  },
+
+  updateTodo: async (id: string, patch: { text?: string; completed?: boolean }) => {
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new ApiError('Not authenticated', 401);
+    const uid = user.uid;
+    const todoRef = doc(db, 'users', uid, 'todos', id);
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString(), ...patch };
+    await updateDoc(todoRef, updates);
+    const snap = await getDoc(todoRef);
+    return { id: snap.id, ...(snap.data() as any) };
+  },
+
+  deleteTodo: async (id: string) => {
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new ApiError('Not authenticated', 401);
+    const uid = user.uid;
+    const todoRef = doc(db, 'users', uid, 'todos', id);
+    await deleteDoc(todoRef);
+    return { id };
   },
 
   // ── Wins ──
