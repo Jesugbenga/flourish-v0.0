@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '@/constants/theme';
+import { useAuthContext } from '@/context/auth-context';
 
 const planItems = [
   {
@@ -45,6 +46,7 @@ const planItems = [
 
 export default function PlanScreen() {
   const router = useRouter();
+  const { hasPremium } = useAuthContext();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -77,21 +79,23 @@ export default function PlanScreen() {
           </TouchableOpacity>
         ))}
 
-        {/* Premium Banner */}
-        <TouchableOpacity
-          style={styles.premiumBanner}
-          activeOpacity={0.8}
-          onPress={() => router.push('/paywall')}
-        >
-          <View style={styles.premiumContent}>
-            <Ionicons name="sparkles" size={20} color={Colors.gold} />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.premiumTitle}>Unlock Premium</Text>
-              <Text style={styles.premiumSub}>Unlimited swaps, AI meal plans & more</Text>
+        {/* Premium Banner (hidden when user has premium) */}
+        {!hasPremium && (
+          <TouchableOpacity
+            style={styles.premiumBanner}
+            activeOpacity={0.8}
+            onPress={() => router.push('/paywall')}
+          >
+            <View style={styles.premiumContent}>
+              <Ionicons name="sparkles" size={20} color={Colors.gold} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.premiumTitle}>Unlock Premium</Text>
+                <Text style={styles.premiumSub}>Unlimited swaps, AI meal plans & more</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={18} color={Colors.gold} />
             </View>
-            <Ionicons name="arrow-forward" size={18} color={Colors.gold} />
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
