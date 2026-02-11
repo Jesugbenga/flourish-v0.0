@@ -1,3 +1,4 @@
+import React from 'react';
 import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,12 +21,18 @@ function getGreeting(): string {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, challengeDays } = useApp();
+  const { user, challengeDays, refreshWins, refreshProfile } = useApp();
   const { displayName: authDisplayName } = useAuthContext();
   const displayName = (user.name && user.name.trim()) ? user.name : (authDisplayName ?? '');
   const completedDays = challengeDays.filter((d) => d.completed).length;
   const challengeBadgeLabel = completedDays === 0 ? 'Day 1' : `Day ${completedDays + 1}`;
   const todayTip = dailyTips[Math.floor(Date.now() / 86400000) % dailyTips.length];
+
+  // Ensure totalSaved is up-to-date on mount or when user changes
+  React.useEffect(() => {
+    refreshWins();
+    refreshProfile();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

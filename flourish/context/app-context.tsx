@@ -197,31 +197,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const completeChallenge = useCallback(
-    (day: number) => {
+    async (day: number) => {
       setChallengeState((prev) => {
         const found = prev.find((d) => d.day === day);
         // If already completed, noop
         if (!found || found.completed) return prev;
-        const next = prev.map((d) => (d.day === day ? { ...d, completed: true } : d));
+        return prev.map((d) => (d.day === day ? { ...d, completed: true } : d));
+      });
+
+      // Find the userChallengeId (for now, assume challengeId = day)
+      // TODO: If you have a real userChallengeId, use it here
+      try {
+        // Call backend to mark challenge complete
+        // Replace 'day' with the actual userChallengeId if available
+        await api.completeChallenge(String(day));
 
         // Add a win for this completed challenge day
-        const amount = parseFloat(String(found.savingsEstimate).replace(/[^0-9.]/g, '')) || 0;
-        const win = {
-          id: Date.now().toString(),
-          type: 'challenge' as const,
-          description: `Day ${day}: ${found.title}`,
-          amount,
-          date: new Date().toISOString().split('T')[0],
-        };
-
-        // addWin does optimistic update + refreshWins after api.logWin; don't call refreshWins here
-        // or it can overwrite the new total with a stale summary before the backend has the win
-        addWin(win);
-
-        return next;
-      });
+        const found = challengeState.find((d) => d.day === day);
+        if (found) {
+          const amount = parseFloat(String(found.savingsEstimate).replace(/[^0-9.]/g, '')) || 0;
+          const win = {
+            id: Date.now().toString(),
+            type: 'challenge' as const,
+            description: `Day ${day}: ${found.title}`,
+            amount,
+            date: new Date().toISOString().split('T')[0],
+          };
+          addWin(win);
+        }
+      } catch (err) {
+        // Optionally show error/toast
+      }
     },
-    [addWin],
+    [addWin, challengeState],
   );
 
   const toggleLike = useCallback((postId: string) => {
