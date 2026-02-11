@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // Rate limiting: max 10 calls per 60 seconds per user
 const RATE_LIMIT = { max: 10, windowSeconds: 60 };
@@ -78,6 +78,7 @@ Reply style requirements (strict):
 - Prefer 1–3 sentences for typical answers; only expand when the user explicitly asks for more.
 - Use plain, everyday language and act like a friendly, practical advisor.
 - If a short list of steps helps, present 3 concise bullets (no long paragraphs).
+- Respond ONLY with valid JSON (no markdown, no other text).
 
 Your personality:
 - Calm, encouraging, and non-judgmental
@@ -112,81 +113,17 @@ function stripCodeFences(s: string) {
 
 function extractAndParseJSON(text: string): any {
   if (!text || typeof text !== 'string') return null;
-  
   const cleaned = stripCodeFences(text).trim();
-  
-  // Try to find the first { character
-  const firstBrace = cleaned.indexOf('{');
-  if (firstBrace === -1) {
-    console.error('[extractAndParseJSON] No opening brace found. Text:', truncate(cleaned, 300));
-    throw new Error(`No JSON object found in response. Snippet: ${truncate(cleaned, 200)}`);
-  }
-
-  // Find matching closing brace by tracking nesting depth.
-  let depth = 0;
-  for (let i = firstBrace; i < cleaned.length; i++) {
-    const ch = cleaned[i];
-    if (ch === '{') depth++;
-    else if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        const candidate = cleaned.slice(firstBrace, i + 1);
-        try {
-          const result = JSON.parse(candidate);
-          console.log('[extractAndParseJSON] Successfully parsed JSON from position', firstBrace, 'to', i);
-          return result;
-        } catch (e) {
-          console.error('[extractAndParseJSON] Brace-matched JSON failed to parse:', (e as Error).message);
-          // Fall through to try fallback
-          break;
-        }
-      }
-    }
-  }
-
-  // Fallback: try to extract largest {..} block via regex (less safe but more forgiving)
-  console.warn('[extractAndParseJSON] Brace matching failed, trying regex fallback');
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (match) {
-    try {
-      const result = JSON.parse(match[0]);
-      console.log('[extractAndParseJSON] Successfully parsed via regex fallback');
-      return result;
-    } catch (e) {
-      console.error('[extractAndParseJSON] Regex fallback also failed:', (e as Error).message);
-      throw new Error(`JSON Parse error: ${(e as Error).message}. Snippet: ${truncate(cleaned, 300)}`);
-    }
-  }
-  // Recovery attempt for truncated JSON: try to close unbalanced quotes and braces
   try {
-    const candidate = cleaned.slice(firstBrace);
-    let repaired = candidate;
-
-    // If odd number of double quotes, close the open string
-    const quoteCount = (repaired.match(/"/g) || []).length;
-    if (quoteCount % 2 === 1) {
-      repaired = repaired + '"';
-      console.warn('[extractAndParseJSON] Repaired by closing odd quote');
-    }
-
-    // Balance braces by counting remaining opens
-    const opens = (repaired.match(/\{/g) || []).length;
-    const closes = (repaired.match(/\}/g) || []).length;
-    const missing = opens - closes;
-    if (missing > 0 && missing < 20) {
-      repaired = repaired + '}'.repeat(missing);
-      console.warn('[extractAndParseJSON] Appended', missing, 'closing brace(s) to repair JSON');
-    }
-
-    const result = JSON.parse(repaired);
-    console.log('[extractAndParseJSON] Successfully repaired and parsed truncated JSON');
+    const jsonStart = cleaned.indexOf('{');
+    if (jsonStart === -1) throw new Error('No JSON object found in response.');
+    const jsonText = cleaned.slice(jsonStart);
+    const result = JSON.parse(jsonText);
     return result;
   } catch (e) {
-    console.error('[extractAndParseJSON] Recovery attempt failed:', (e as Error).message);
+    console.error('[extractAndParseJSON] Failed to parse JSON:', (e as Error).message, '\nRaw:', truncate(cleaned, 400));
+    throw new Error(`Unable to extract JSON from response. Snippet: ${truncate(cleaned, 300)}`);
   }
-
-  console.error('[extractAndParseJSON] No JSON block found at all. Full text:', truncate(cleaned, 500));
-  throw new Error(`Unable to extract JSON from response. Snippet: ${truncate(cleaned, 300)}`);
 }
 
 // ── Sanitizers ─────────────────────────────────
@@ -222,24 +159,28 @@ function sanitizeSmartSwap(obj: any): SmartSwapResponse {
 }
 
 function sanitizeMealPlan(obj: any): MealPlanResponse {
-  const days = (obj.days || []).map((d: any) => {
-    const mealsObj: Record<string, any> = {};
-    const mealTypes = ['breakfast', 'lunch', 'dinner'];
-    for (const t of mealTypes) {
-      const m = (d.meals && d.meals[t]) || {};
-      mealsObj[t] = {
-        name: (m.name || '').toString().trim() || 'Simple meal',
-        emoji: extractFirstEmoji((m.emoji || '').toString()) || '',
-        estimatedCost: formatCurrency((m.estimatedCost || m.cost || '').toString()),
-      };
-    }
-    return { day: (d.day || '').toString().trim() || 'Day', meals: mealsObj };
-  });
-
+  // Only support new single-meal format
+  if (!obj.meal) {
+    throw new Error('Invalid meal plan format: missing "meal" property.');
+  }
+  const meal = obj.meal;
+  const dayObj = {
+    day: 'Today',
+    meals: {
+      main: {
+        name: (meal.name || '').toString().trim() || 'Simple meal',
+        emoji: extractFirstEmoji((meal.name || '').toString()) || '',
+        estimatedCost: typeof meal.costPerServing === 'number' ? `£${meal.costPerServing.toFixed(2)}` : formatCurrency(meal.costPerServing),
+        savingsVsTakeout: typeof meal.savingsVsTakeout === 'number' ? meal.savingsVsTakeout : 0,
+        ingredients: Array.isArray(meal.ingredients) ? meal.ingredients : [],
+        steps: Array.isArray(meal.steps) ? meal.steps : [],
+      },
+    },
+  };
   return {
-    days,
-    totalBudget: formatCurrency((obj.totalBudget || obj.total || '').toString()),
-    tips: Array.isArray(obj.tips) ? obj.tips.map((t: any) => t.toString()) : [],
+    days: [dayObj],
+    totalBudget: typeof meal.costPerServing === 'number' ? `£${meal.costPerServing.toFixed(2)}` : formatCurrency(meal.costPerServing),
+    tips: obj.tip ? [obj.tip] : [],
   };
 }
 
@@ -493,24 +434,19 @@ export async function mealPlanWithGemini(userId: string, payload: MealPlanPayloa
   if (!rateCheck.allowed) throw new Error(rateCheck.error);
 
   const MEAL_PROMPT = `You are a friendly UK meal planning assistant for busy families on a budget.
-Create a ${payload.days}-day meal plan for ${payload.numPeople} people with a budget of £${payload.budget}.
-Use affordable UK ingredients from Aldi, Lidl, Tesco, Asda.
-Each day must include breakfast, lunch, and dinner with emojis.
-Keep meals simple, family-friendly, and budget-conscious.
+Suggest ONE simple, family-friendly meal that fits a budget of £${payload.budget} for ${payload.numPeople} people.
+Use affordable UK ingredients from Aldi, Lidl, Tesco, or Asda.
+Keep the recipe brief and simplified: use only 3–6 ingredients and 3–5 short steps. Do not include long instructions or paragraphs.
 Respond ONLY with valid JSON (no markdown, no other text). EXACTLY this structure:
 {
-  "days": [
-    {
-      "day": "Monday",
-      "meals": {
-        "breakfast": { "name": "meal name", "emoji": "🍳", "estimatedCost": "£2.50" },
-        "lunch": { "name": "meal name", "emoji": "🥪", "estimatedCost": "£3.00" },
-        "dinner": { "name": "meal name", "emoji": "🍝", "estimatedCost": "£4.50" }
-      }
-    }
-  ],
-  "totalBudget": "£40.00",
-  "tips": ["tip1", "tip2", "tip3"]
+  "meal": {
+    "name": "Meal name, e.g. 'Spaghetti Bolognese'",
+    "costPerServing": 3.25,
+    "savingsVsTakeout": 6,
+    "ingredients": ["ingredient 1", "ingredient 2", "ingredient 3"],
+    "steps": ["Step 1 instruction.", "Step 2 instruction.", "Step 3 instruction."]
+  },
+  "tip": "a practical money-saving tip related to the meal, written for busy parents"
 }`;
 
   try {
@@ -519,7 +455,7 @@ Respond ONLY with valid JSON (no markdown, no other text). EXACTLY this structur
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: MEAL_PROMPT }] }],
-        generationConfig: { temperature: 0.8, maxOutputTokens: 1500 },
+        generationConfig: { temperature: 0.8, maxOutputTokens: 2000 },
       }),
     });
 
@@ -530,10 +466,6 @@ Respond ONLY with valid JSON (no markdown, no other text). EXACTLY this structur
     console.log('[mealPlan] Raw Gemini response:', text);
 
     const parsed = extractAndParseJSON(text);
-
-    if (!parsed || !parsed.days || !Array.isArray(parsed.days) || parsed.days.length === 0) {
-      throw new Error(`Invalid response format: missing or empty days array. Raw response: ${truncate(text, 400)}`);
-    }
 
     // Sanitize and normalize for UI
     const sanitized = sanitizeMealPlan(parsed);

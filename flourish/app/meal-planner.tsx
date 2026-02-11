@@ -21,6 +21,7 @@ export default function MealPlannerScreen() {
   const [addedMeals, setAddedMeals] = useState<Set<string>>(new Set());
   const [aiPlan, setAiPlan] = useState<MealPlanResponse | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [plannedMeals, setPlannedMeals] = useState<Array<any>>([]);
 
   const gated = !canAccess('meal-planner', hasPremium);
 
@@ -46,6 +47,7 @@ export default function MealPlannerScreen() {
     if (!plan) return [] as typeof mealPlans;
     const cards: Array<any> = [];
     plan.days.forEach((day, dayIndex) => {
+      const planTip = Array.isArray(plan.tips) && plan.tips.length > 0 ? plan.tips[0] : '';
       const mealEntries = Object.entries(day.meals || {});
       mealEntries.forEach(([type, meal]) => {
         const id = `ai-${dayIndex}-${type}`;
@@ -53,7 +55,12 @@ export default function MealPlannerScreen() {
         // estimatedCost is like '£3.00' — parse numeric
         const costNum = parseFloat((meal.estimatedCost || '£0').replace(/[^0-9.]/g, '')) || 0;
         const costPerServing = Number((costNum).toFixed(2));
-        const savingsVsTakeout = Math.max(0, Math.round(costPerServing * 2)); // heuristic
+        const savingsVsTakeout = typeof (meal as any).savingsVsTakeout === 'number'
+          ? (meal as any).savingsVsTakeout
+          : Math.max(0, Math.round(costPerServing * 2)); // fallback heuristic
+
+        const ingredients = Array.isArray((meal as any).ingredients) ? (meal as any).ingredients : [];
+        const steps = Array.isArray((meal as any).steps) ? (meal as any).steps : [];
 
         cards.push({
           id,
@@ -61,9 +68,10 @@ export default function MealPlannerScreen() {
           costPerServing,
           savingsVsTakeout,
           prepTime: '25 min',
-          tags: ['AI Plan'],
-          ingredients: [],
-          steps: [],
+          tags: ['Quick', 'AI Plan'],
+          ingredients,
+          steps,
+          tip: planTip,
         });
       });
     });
@@ -71,6 +79,10 @@ export default function MealPlannerScreen() {
   };
 
   const aiMeals = buildAiMeals(aiPlan);
+  const allMeals = [
+    ...plannedMeals,
+    ...mealPlans.filter((m) => !plannedMeals.some((pm) => pm.id === m.id)),
+  ];
 
   const handleAddMeal = (meal: (typeof mealPlans)[0]) => {
     if (addedMeals.has(meal.id)) return;
@@ -81,6 +93,11 @@ export default function MealPlannerScreen() {
       description: `Planned: ${meal.name}`,
       amount: meal.savingsVsTakeout,
       date: new Date().toISOString().split('T')[0],
+    });
+    // keep the planned meal visible on this screen
+    setPlannedMeals((prev) => {
+      if (prev.some((m) => m.id === meal.id)) return prev;
+      return [...prev, meal];
     });
   };
 
@@ -189,15 +206,18 @@ export default function MealPlannerScreen() {
 
                     <View style={styles.whySaves}>
                       <Ionicons name="leaf" size={14} color={Colors.sageDark} />
-                      <Text style={styles.whySavesText}>This is estimated to save compared to takeout.</Text>
+                      <Text style={styles.whySavesText}>
+                        {meal.tip ? meal.tip : `This saves £${meal.savingsVsTakeout.toFixed(2)} compared to a similar takeaway.`}
+                      </Text>
                     </View>
 
                     <FlourishButton
-                      title={isMealAdded(meal.id, meal.name) ? 'Added to plan ✓' : 'Add to my plan'}
+                      title={isMealAdded(meal.id, meal.name) ? 'Added to plan' : 'Add to my plan'}
                       onPress={() => handleAddMeal(meal)}
                       variant={isMealAdded(meal.id, meal.name) ? 'secondary' : 'primary'}
                       fullWidth
                       disabled={isMealAdded(meal.id, meal.name)}
+                      icon={isMealAdded(meal.id, meal.name) ? 'checkmark-circle' : 'add-circle'}
                     />
                   </View>
                 )}
@@ -211,14 +231,7 @@ export default function MealPlannerScreen() {
               </TouchableOpacity>
             </Animated.View>
           ))}
-
-          {aiPlan && aiPlan.tips.length > 0 && (
-            <View style={{ backgroundColor: Colors.sageLight, padding: Spacing.md, borderRadius: BorderRadius.md }}>
-              {aiPlan.tips.map((tip, i) => (
-                <Text key={i} style={{ ...Typography.caption1, color: Colors.sageDark, marginBottom: 4 }}>💡 {tip}</Text>
-              ))}
-            </View>
-          )}
+          
         </View>
       )}
 
@@ -243,7 +256,7 @@ export default function MealPlannerScreen() {
       </View>
 
       {/* Meal Cards */}
-      {mealPlans.map((meal, index) => (
+      {allMeals.map((meal, index) => (
         <Animated.View
           key={meal.id}
           entering={FadeInDown.delay(index * 100).duration(400)}
@@ -280,7 +293,7 @@ export default function MealPlannerScreen() {
 
             {/* Tags */}
             <View style={styles.tagsRow}>
-              {meal.tags.map((tag) => (
+              {meal.tags.map((tag: string) => (
                 <View key={tag} style={styles.tag}>
                   <Text style={styles.tagText}>{tag}</Text>
                 </View>
@@ -291,21 +304,22 @@ export default function MealPlannerScreen() {
             {expandedMeal === meal.id && (
               <View style={styles.expandedContent}>
                 <Text style={styles.expandedTitle}>Ingredients</Text>
-                {meal.ingredients.map((ing, i) => (
+                {meal.ingredients.map((ing: string, i: number) => (
                   <Text key={i} style={styles.ingredientText}>
-                    • {ing}
+                  • {ing}
                   </Text>
                 ))}
 
                 <Text style={[styles.expandedTitle, { marginTop: Spacing.md }]}>Steps</Text>
-                {meal.steps.map((step, i) => (
+                {meal.steps.map((step: string, i: number) => (
                   <View key={i} style={styles.stepRow}>
-                    <View style={styles.stepNumber}>
-                      <Text style={styles.stepNumberText}>{i + 1}</Text>
-                    </View>
-                    <Text style={styles.stepText}>{step}</Text>
+                  <View style={styles.stepNumber}>
+                    <Text style={styles.stepNumberText}>{i + 1}</Text>
+                  </View>
+                  <Text style={styles.stepText}>{step}</Text>
                   </View>
                 ))}
+
 
                 <View style={styles.whySaves}>
                   <Ionicons name="leaf" size={14} color={Colors.sageDark} />
@@ -315,11 +329,12 @@ export default function MealPlannerScreen() {
                 </View>
 
                 <FlourishButton
-                  title={isMealAdded(meal.id, meal.name) ? 'Added to plan ✓' : 'Add to my plan'}
+                  title={isMealAdded(meal.id, meal.name) ? 'Added to plan' : 'Add to my plan'}
                   onPress={() => handleAddMeal(meal)}
                   variant={isMealAdded(meal.id, meal.name) ? 'secondary' : 'primary'}
                   fullWidth
                   disabled={isMealAdded(meal.id, meal.name)}
+                  icon={isMealAdded(meal.id, meal.name) ? 'checkmark-circle' : 'add-circle'}
                 />
               </View>
             )}

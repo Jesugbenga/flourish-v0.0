@@ -164,7 +164,7 @@ export default function SmartSwapScreen() {
                 </View>
 
                 <FlourishButton
-                  title={isSwapSaved(swap.id, swap.alternative) ? 'Added to wins ✓' : 'Add to my wins'}
+                  title={isSwapSaved(swap.id, swap.alternative) ? 'Added to wins' : 'Add to my wins'}
                   onPress={() => {
                     if (isSwapSaved(swap.id, swap.alternative)) return;
                     setSavedItems((prev) => new Set([...prev, swap.id]));
@@ -246,7 +246,7 @@ export default function SmartSwapScreen() {
 
             {/* CTA */}
             <FlourishButton
-              title={isSwapSaved(swap.id, swap.alternative) ? 'Added to wins ✓' : 'Add to my wins'}
+              title={isSwapSaved(swap.id, swap.alternative) ? 'Added to wins' : 'Add to my wins'}
               onPress={() => handleSaveSwap(swap)}
               variant={isSwapSaved(swap.id, swap.alternative) ? 'secondary' : 'primary'}
               fullWidth
