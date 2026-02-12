@@ -1,28 +1,11 @@
 {
   "build": {
     "production": {
-      "ios": {
-        "buildType": "app-store"
-      },
-      "android": {
-        "buildType": "app-bundle"
-      }
+      "environment": "production"
     },
     "development": {
-      "ios": {
-        "buildType": "development"
-      },
-      "android": {
-        "buildType": "apk"
-      }
-    }
-  },
-  "submit": {
-    "production": {
-      "ios": {
-        "appleId": "",
-        "ascAppId": ""
-      }
+      "environment": "development",
+      "developmentClient": true
     }
   }
 }
