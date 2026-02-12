@@ -55,6 +55,10 @@ module.exports = ({ config }) => {
 
       // Public RevenueCat keys
       EXPO_PUBLIC_REVENUECAT_API_KEY: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY || null,
+      EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY || null,
+
+      // Backend API URL (Cloud Functions)
+      EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL || null,
     
 
       // Router / EAS metadata
@@ -88,7 +92,7 @@ module.exports = ({ config }) => {
 
     android: {
       package: process.env.ANDROID_PACKAGE || 'com.company.flourish',
-      versionCode: 17,
+      versionCode: 19,
       adaptiveIcon: {
         foregroundImage: './assets/images/flourish-icon.png',
         backgroundColor: '#D4E7D9',

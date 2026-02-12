@@ -69,7 +69,7 @@ export default function SmartSwapScreen() {
         originalItem: orig,
         originalPrice: 0,
         alternative: s.name || 'Alternative',
-        alternativePrice: +(savingsWeekly * 17).toFixed(2),
+        alternativePrice: +(savingsWeekly * 11.6).toFixed(2),
         savingsWeekly,
         savingsYearly,
         confidence: 75,

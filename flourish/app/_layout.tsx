@@ -1,12 +1,17 @@
 import { ThemeProvider, DefaultTheme } from '@react-navigation/native';
 import { Redirect, Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { ActivityIndicator, View } from 'react-native';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { AppProvider } from '@/context/app-context';
 import { AuthProvider, useAuthContext } from '@/context/auth-context';
 import { Colors } from '@/constants/theme';
+
+// Keep the splash screen visible until we explicitly hide it
+SplashScreen.preventAutoHideAsync();
 
 const FlourishTheme = {
   ...DefaultTheme,
@@ -37,6 +42,13 @@ function InitGate({ children }: { children: React.ReactNode }) {
 
   const inAuthGroup = segments[0] === 'auth';
   const inOnboarding = segments[0] === 'onboarding';
+
+  // Hide splash screen once auth is resolved
+  useEffect(() => {
+    if (isReady) {
+      SplashScreen.hideAsync();
+    }
+  }, [isReady]);
 
   if (!isReady) {
     return (

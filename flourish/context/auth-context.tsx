@@ -27,7 +27,6 @@ import { firebaseAuth } from '@/lib/firebase';
 import { REVENUECAT_API_KEY, REVENUECAT_ANDROID_API_KEY, PREMIUM_ENTITLEMENT } from '@/lib/config';
 import { api } from '@/lib/api';
 import { useApp } from '@/context/app-context';
-import * as Updates from 'expo-updates';
 
 // ── Context Shape ───────────────────────────────────────────
 
@@ -100,8 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     purchasesConfiguredRef.current = true;
-    Purchases.configure({ apiKey });
-    setIsPurchasesConfigured(true);
+    try {
+      Purchases.configure({ apiKey });
+      setIsPurchasesConfigured(true);
+    } catch (e) {
+      console.warn('[AuthContext] RevenueCat configure failed:', e);
+      setIsPurchasesConfigured(false);
+    }
   }, []);
 
   // ── RevenueCat: log in and sync premium when user signs in ──
@@ -120,8 +124,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
 
     const listener = (info: CustomerInfo) => checkPremium(info);
-    Purchases.addCustomerInfoUpdateListener(listener);
-    return () => { Purchases.removeCustomerInfoUpdateListener(listener); };
+    try {
+      Purchases.addCustomerInfoUpdateListener(listener);
+    } catch (e) {
+      console.warn('[AuthContext] Failed to add RevenueCat listener:', e);
+    }
+    return () => {
+      try {
+        Purchases.removeCustomerInfoUpdateListener(listener);
+      } catch {}
+    };
   }, [isSignedIn, userId, checkPremium]);
 
   // ── Backend init (creates Firestore user + fetches onboarding state) ──
@@ -136,6 +148,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // otherwise InitGate would briefly send returning users to onboarding.
     setIsReady(false);
 
+    // Safety timeout: if backend init takes too long (e.g. network issues),
+    // set isReady=true after 8 seconds so the app doesn't hang on splash screen forever.
+    const timeout = setTimeout(() => {
+      setIsReady((prev) => {
+        if (!prev) console.warn('[AuthContext] Backend init timed out — proceeding anyway');
+        return true;
+      });
+    }, 8000);
+
     const initBackend = async () => {
       try {
         await api.initUser(email, displayName ?? undefined);
@@ -144,10 +165,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error('[AuthContext] Backend init failed:', err);
       } finally {
+        clearTimeout(timeout);
         setIsReady(true);
       }
     };
     initBackend();
+
+    return () => clearTimeout(timeout);
   }, [authResolved, isSignedIn, email, displayName, refreshProfile, refreshWins]);
 
   // ── Actions ──
