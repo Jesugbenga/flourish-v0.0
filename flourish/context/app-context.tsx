@@ -128,6 +128,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if ((profile.profile as any).budgetCategories !== undefined && Array.isArray(profile.profile.budgetCategories)) {
         setBudget(profile.profile.budgetCategories as BudgetCategory[]);
       }
+      // Load persisted userChallenge instances and mark completed days
+      try {
+        const userChallenges = await api.getUserChallenges();
+        setChallengeState((prev) =>
+          prev.map((d) => ({
+            ...d,
+            completed: !!userChallenges.find(
+              (uc: any) => uc.challenge_id === String(d.day) && uc.status === 'completed',
+            ),
+          })),
+        );
+      } catch {
+        // ignore if unable to fetch userChallenges
+      }
     } catch {
       // Backend unreachable — keep mock data
     }
@@ -208,9 +222,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Find the userChallengeId (for now, assume challengeId = day)
       // TODO: If you have a real userChallengeId, use it here
       try {
-        // Call backend to mark challenge complete
-        // Replace 'day' with the actual userChallengeId if available
-        await api.completeChallenge(String(day));
+        // Ensure a userChallenge exists, then mark it completed
+        const started = await api.startChallenge(String(day));
+        await api.completeChallenge(started.id);
 
         // Add a win for this completed challenge day
         const found = challengeState.find((d) => d.day === day);

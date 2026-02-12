@@ -72,10 +72,10 @@ export const quickActions: QuickAction[] = [
   },
   {
     id: '3',
-    title: 'Quick Invest',
-    subtitle: 'Learn the basics',
-    icon: 'trending-up',
-    route: '/learn',
+    title: 'To-do List',
+    subtitle: 'Track all your tasks',
+    icon: 'checkmark-done',
+    route: '/todo',
     color: '#7EAAB0',
   },
   {

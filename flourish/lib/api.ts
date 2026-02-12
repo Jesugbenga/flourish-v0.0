@@ -527,6 +527,16 @@ export const api = {
     return { challenges };
   },
 
+  // ── Per-user userChallenges (started/completed challenge instances) ──
+  getUserChallenges: async () => {
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new ApiError('Not authenticated', 401);
+    const uid = user.uid;
+    const col = collection(db, 'users', uid, 'userChallenges');
+    const snap = await getDocs(col);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  },
+
   startChallenge: async (challengeId: string) => {
     const user = firebaseAuth.currentUser;
     if (!user) throw new ApiError('Not authenticated', 401);
