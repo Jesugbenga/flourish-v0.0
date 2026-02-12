@@ -1,6 +1,146 @@
-# 🌱 Flourish
 
-Flourish is a mobile app that helps busy mums save money daily and learn bite-size investing — simple tips, meal-costing, "smart swaps" and 5-minute investment lessons.
+🌷 Flourish — Technical Documentation
+
+1️⃣ High-Level Architecture Overview
+
+Flourish is built using a modern, server-validated architecture designed for security, subscription enforcement, and AI-powered personalization. The system favors server-side validation for auth, subscriptions, and AI usage to prevent client-side spoofing and ensure predictable behavior across devices.
+
+Tech Stack
+- Frontend: React Native (Expo) + TypeScript + Expo Router
+- Auth: Firebase Authentication (ID tokens)
+- Subscriptions: RevenueCat (client SDK + server webhooks)
+- Backend: Firebase (Firestore + Cloud Functions) — this repo contains a Firebase backend in `backend/`
+- AI: Google Gemini (server-side calls)
+
+System Architecture (logical)
+
+Client (Expo app)
+   • Uses Firebase Auth for sign-in, stores session JWT
+   • Calls server endpoints for protected actions
+   • Uses RevenueCat SDK for in-app purchase flow
+         ↓
+Auth & Server Validation Layer (Cloud Functions / serverless)
+   • Verifies Firebase ID token for each request (using Firebase Admin SDK)
+   • Verifies entitlement via RevenueCat webhooks / Firestore
+   • Forwards structured prompts to Gemini and returns JSON
+         ↓
+Database (Postgres / Firestore)
+   • Stores users, subscription state, wins, goals
+
+This pattern enforces that all premium features and AI usage are validated and audited server-side.
+
+🔐 Authentication Flow
+- User signs in with Firebase Authentication in the client (email/password, social providers, or anonymous).
+- Firebase issues an ID token; the client includes the token in API requests (Authorization: Bearer <idToken>).
+- Cloud Functions verify the ID token via the Firebase Admin SDK before processing requests.
+- Any premium gated action requires server-side subscription verification (check Firestore `subscription_status`).
+
+2️⃣ AI Architecture
+
+All AI-related features (Smart Swap, Meal Planner, Goal Calculator, AI Chat) are executed server-side (Cloud Functions) to centralize API keys and enforce subscription checks.
+
+AI request flow:
+- Client submits a structured request to an Edge Function.
+- The function verifies auth and subscription status.
+- The function composes a structured prompt and calls the Gemini API.
+- Gemini returns structured JSON which the function validates, persists (if needed), and returns to the client.
+
+We enforce JSON-only responses with schema checks to prevent hallucinated formats and simplify frontend rendering.
+
+Database & Data Model (simplified — Firestore)
+
+- users
+   - id
+   - firebase_uid
+   - email
+   - subscription_status (active | expired | canceled | billing_issue)
+   - created_at
+
+- quick_wins
+   - id, user_id, title, amount_saved, created_at
+
+- goals
+   - id, user_id, target_amount, monthly_contribution, projected_date
+
+- challenges / userChallenges
+   - per-user instances to persist 7-day challenge completion
+
+Subscription state is the single source of truth in Firestore and is updated via RevenueCat webhooks processed by Cloud Functions.
+
+4️⃣ RevenueCat Integration & Monetization Setup
+
+Overview
+Flourish uses RevenueCat to manage cross-platform subscriptions, entitlement abstraction, and secure server-side receipt validation. Webhooks are consumed by a Firebase Cloud Function which updates Firestore.
+
+Subscription flow
+1) Client Purchase
+   - The client uses the RevenueCat SDK to fetch offerings and trigger purchases.
+   - The SDK returns purchaser info which the client can use immediately for UI gating.
+
+2) Webhook Sync
+   - RevenueCat sends webhook events (purchase, renewal, cancellation, billing issues) to a server endpoint.
+   - Webhook handler verifies the signature and updates the user's `subscription_status` in the DB.
+
+3) Server Enforcement
+   - Every premium API route verifies the Firebase ID token, then reads `subscription_status` from Firestore.
+   - If not `active`, the API returns 403. This prevents client-side spoofing.
+
+Monetization tiers (example)
+- Free: limited swaps/day, basic budgeting
+- Premium: unlimited AI features, advanced analytics
+- Pricing examples: £4.99/month, £49.99/year (managed in RevenueCat)
+
+Why RevenueCat?
+- Cross-platform reconciliation, webhook delivery, entitlement abstraction, analytics dashboard, and reduced platform-specific billing complexity.
+
+Server-side webhook & helper code
+- Webhook endpoint example: [backend/api/webhooks/revenuecat.ts](backend/api/webhooks/revenuecat.ts) (handled by Firebase Cloud Function / Express handler)
+- Server helper: [backend/revenuecat.ts](backend/revenuecat.ts)
+- Middleware protecting premium routes: [backend/middleware/require-premium.ts](backend/middleware/require-premium.ts)
+
+Security & Secrets
+- Store `REVENUECAT_WEBHOOK_SECRET` and `REVENUECAT_API_KEY` server-side (do NOT embed in the client).
+- For Cloud Functions / Firebase deploys, store secrets via `functions.config()` (or use Secret Manager) and expose only safe runtime config to the client.
+- Use EAS secrets or CI secret storage for client build-time values; never include server secrets in `app.config.js`.
+
+5️⃣ Dev / Testing / QA
+
+- Sandbox purchases: use RevenueCat sandbox and Play Console / TestFlight testers.
+- End-to-end test: make a sandbox purchase → confirm RevenueCat dashboard → confirm webhook delivery → confirm DB update → sign out/in to ensure entitlement persists.
+- Webhook debugging: use RevenueCat logs and server logs; ensure signature verification matches `REVENUECAT_WEBHOOK_SECRET`.
+
+6️⃣ Deployment & Env Notes
+
+- Build-time env: use `app.config.js` (or `expo` dynamic config) to inject safe runtime values for the client. Do NOT include server secrets.
+- Server secrets: store in your deployment environment (Firebase Functions config / Secret Manager, or CI/EAS secrets).
+- Cloud Functions deploy: use `firebase deploy --only functions` or CI pipelines with `firebase-tools`.
+- EAS builds: run from the project root where `package.json` exists.
+
+7️⃣ Scalability & Operations
+
+- Stateless Edge Functions for scale; Postgres/Firestore as persistent store.
+- Rate-limit AI calls per user and enforce quotas server-side.
+- Reconciliation: schedule periodic syncs with RevenueCat's subscriber API for missed webhook events.
+
+8️⃣ Code References (quick links)
+- Webhooks: [backend/api/webhooks/revenuecat.ts](backend/api/webhooks/revenuecat.ts)
+- RevenueCat helper: [backend/revenuecat.ts](backend/revenuecat.ts)
+- Auth middleware: [backend/middleware/require-auth.ts](backend/middleware/require-auth.ts)
+- Premium middleware: [backend/middleware/require-premium.ts](backend/middleware/require-premium.ts)
+- Client paywall UI: [flourish/app/paywall.tsx](flourish/app/paywall.tsx)
+- Challenge persistence: [flourish/context/app-context.tsx](flourish/context/app-context.tsx)
+
+9️⃣ Quick Setup Checklist
+- Create products in App Store / Play Console.
+- Configure those products and entitlements in RevenueCat.
+- Add `REVENUECAT_API_KEY` and `REVENUECAT_WEBHOOK_SECRET` to server env/EAS secrets.
+- Point RevenueCat webhook to `https://<your-backend>/api/webhooks/revenuecat`.
+- Test in sandbox and verify DB updates and cross-device persistence.
+
+🔚 Summary
+
+Flourish combines secure auth, server-side subscription validation (RevenueCat + Edge Functions), and AI-driven features (Gemini) in a scalable serverless architecture. The server is the source of truth for subscription state and AI access, ensuring consistent, secure behavior across platforms.
+
 
 ## Tech Stack
 
@@ -9,8 +149,8 @@ Flourish is a mobile app that helps busy mums save money daily and learn bite-si
 | **Frontend**   | React Native / Expo SDK 54, Expo Router |
 | **Auth**       | Firebase Authentication (Google + Apple) |
 | **Database**   | Cloud Firestore (NoSQL)                 |
-| **Backend**    | Vercel Serverless Functions (TypeScript) |
-| **AI**         | Google Gemini 1.5 Flash                 |
+| **Backend**    | Cloud Functions (TypeScript) |
+| **AI**         | Google Gemini 3 Flash                 |
 | **Payments**   | RevenueCat (in-app subscriptions)       |
 
 ---

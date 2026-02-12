@@ -88,7 +88,7 @@ module.exports = ({ config }) => {
 
     android: {
       package: process.env.ANDROID_PACKAGE || 'com.company.flourish',
-      versionCode: 16,
+      versionCode: 17,
       adaptiveIcon: {
         foregroundImage: './assets/images/flourish-icon.png',
         backgroundColor: '#D4E7D9',

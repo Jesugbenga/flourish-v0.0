@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.company.flourish",
-      "buildNumber": "1.0.0",
+      "buildNumber": "1",
       "icon": "./assets/images/flourish-icon.png",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false

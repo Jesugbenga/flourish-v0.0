@@ -73,14 +73,11 @@ Flourish was built with a modern, scalable stack:
 - React Native (Expo)
 - TypeScript
 - Expo Router
-- Clerk (authentication)
 - RevenueCat (subscriptions)
 
 **Backend**
 
-- Supabase (Postgres database)
-- Serverless Edge Functions
-- Clerk JWT validation
+- Firebase (Auth + Firestore)
 - RevenueCat webhooks
 - Gemini API for AI-powered features
 
@@ -90,7 +87,6 @@ We integrated Google Gemini to power:
 
 - Smart Swap suggestions
 - AI meal planning
-- Goal-based calculator
 - Investment explanations
 - Context-aware chatbot
 
@@ -124,7 +120,7 @@ All AI responses are structured JSON, cached securely, and personalized using us
 
 ## 🏆 Accomplishments We're Proud Of
 
-- Built a fully authenticated backend using Clerk + Supabase
+- Built a fully authenticated backend using Firebase
 - Integrated AI deeply into core workflows
 - Created real subscription gating (not just UI locks)
 - Designed an emotionally intelligent UX
