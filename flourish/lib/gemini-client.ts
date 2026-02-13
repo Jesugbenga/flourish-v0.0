@@ -17,7 +17,7 @@ import Constants from 'expo-constants';
 const extra = Constants.expoConfig?.extra ?? {};
 const GEMINI_API_KEY: string =
   extra.EXPO_PUBLIC_GEMINI_API_KEY ?? process.env.EXPO_PUBLIC_GEMINI_API_KEY ?? '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
 
 // Rate limiting: max 10 calls per 60 seconds per user
 const RATE_LIMIT = { max: 10, windowSeconds: 60 };
