@@ -335,7 +335,7 @@ export const rebeccasCornerPosts: RebeccaPost[] = [
   {
     id: '1',
     title: 'Why I started Flourish',
-    body: 'As a mum of two, I know how overwhelming money decisions feel. Flourish was born from wanting something that helps without judging.',
+    body: 'As a mum of three, I know how overwhelming money decisions feel. Flourish was born from wanting something that helps without judging.',
     date: '2026-01-15',
   },
   {
